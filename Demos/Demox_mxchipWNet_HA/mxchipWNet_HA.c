@@ -157,8 +157,6 @@ void MX_Sleep()
 u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
 {
     int fd; 
-    u8  u8Ip[4];
-    int retval;
     int opt = 0;
     struct sockaddr_t addr;
 
@@ -189,7 +187,7 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
 
     ZC_Printf("connect ok!\n");
     g_struProtocolController.struCloudConnection.u32Socket = fd;
-
+    
     return ZC_RET_OK;
 }
 
@@ -532,7 +530,7 @@ void MX_SendDataToCloud(PTC_Connection *pstruConnection)
 *************************************************/
 void delay_reload()
 {
-  need_reload = 1;
+    need_reload = 1;
 }
 
 /*************************************************
@@ -545,13 +543,13 @@ void delay_reload()
 *************************************************/
 void formatMACAddr(void *destAddr, void *srcAddr)
 {
-  sprintf((char *)destAddr, "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c",\
-					toupper(*(char *)srcAddr),toupper(*((char *)(srcAddr)+1)),\
-					toupper(*((char *)(srcAddr)+2)),toupper(*((char *)(srcAddr)+3)),\
-					toupper(*((char *)(srcAddr)+4)),toupper(*((char *)(srcAddr)+5)),\
-					toupper(*((char *)(srcAddr)+6)),toupper(*((char *)(srcAddr)+7)),\
-					toupper(*((char *)(srcAddr)+8)),toupper(*((char *)(srcAddr)+9)),\
-					toupper(*((char *)(srcAddr)+10)),toupper(*((char *)(srcAddr)+11)));
+    sprintf((char *)destAddr, "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c",\
+    				toupper(*(char *)srcAddr),toupper(*((char *)(srcAddr)+1)),\
+    				toupper(*((char *)(srcAddr)+2)),toupper(*((char *)(srcAddr)+3)),\
+    				toupper(*((char *)(srcAddr)+4)),toupper(*((char *)(srcAddr)+5)),\
+    				toupper(*((char *)(srcAddr)+6)),toupper(*((char *)(srcAddr)+7)),\
+    				toupper(*((char *)(srcAddr)+8)),toupper(*((char *)(srcAddr)+9)),\
+    				toupper(*((char *)(srcAddr)+10)),toupper(*((char *)(srcAddr)+11)));
 }
 /*************************************************
 * Function: socket_connected
@@ -783,7 +781,6 @@ void MX_Recvtick(void)
             if(s32RecvLen <= 0)
             {
                 PCT_DisConnectCloud(&g_struProtocolController);
-                
             }
             else
             {
@@ -803,33 +800,35 @@ void MX_Recvtick(void)
 *************************************************/
 void mxchipWNet_HA_tick(void)
 {
-  int fd;
+    int fd;
 
-  mxchipTick();
-  MX_TimerExpired();
-  if (!is_wifi_disalbed()) 
-  {
-      fd = g_struProtocolController.struCloudConnection.u32Socket;
-      MX_Recvtick();
+    mxchipTick();
+    MX_TimerExpired();
+    if (!is_wifi_disalbed()) 
+    {
+        fd = g_struProtocolController.struCloudConnection.u32Socket;
+        MX_Recvtick();
 
-      PCT_Run();
+        PCT_Run();
 
-      if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
-      {
-          close(fd);
-          PCT_ReconnectCloud(&g_struProtocolController);
+        if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
+        {
+            close(fd);
+            PCT_ReconnectCloud(&g_struProtocolController);
           
-      }
-      else
-      {
-          MX_SendDataToCloud(&g_struProtocolController.struCloudConnection);
-      }
-  }
+        }
+        else
+        {
+            MX_SendDataToCloud(&g_struProtocolController.struCloudConnection);
+        }
 
-  if (need_reload == 1) {
-    msleep(500);
-    NVIC_SystemReset();
-  }
+    }
+
+    if (need_reload == 1) 
+    {
+        msleep(500);
+        NVIC_SystemReset();
+    }
 }
 
 
