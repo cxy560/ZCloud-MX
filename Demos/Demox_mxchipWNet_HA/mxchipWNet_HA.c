@@ -107,7 +107,7 @@ MX_StaInfo g_struMXStaInfo = {
     "www.baidu.com"
 };
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
-
+u32 u32CloudIp;
 /*************************************************
 * Function: is_wifi_disalbed
 * Description: 
@@ -163,7 +163,7 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
     struct sockaddr_t addr;
 
     memset((char*)&addr,0,sizeof(addr));
-    
+#if 0    
     retval = gethostbyname((char*)g_struMXStaInfo.u8CloudAddr, u8Ip, 4);
     if(-1 == retval)
     {
@@ -172,7 +172,7 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
 
     
     ZC_Printf("0x%x.0x%x.0x%x.0x%x\n", u8Ip[0],u8Ip[1],u8Ip[2],u8Ip[3]);
-    
+#endif    
     addr.s_ip = inet_addr("192.168.1.111"); 
     addr.s_port = ZC_CLOUD_PORT;
     fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -563,6 +563,7 @@ void formatMACAddr(void *destAddr, void *srcAddr)
 *************************************************/
 void socket_connected(int fd)
 {
+    ZC_Printf("socket connected\n");
     if(fd==g_struProtocolController.struCloudConnection.u32Socket)
     {
         PCT_SendCloudAccessMsg1(&g_struProtocolController);
@@ -578,17 +579,18 @@ void socket_connected(int fd)
 *************************************************/
 void RptConfigmodeRslt(network_InitTypeDef_st *nwkpara)
 {
-  if(nwkpara == NULL){
-    system_reload();
+    ZC_Printf("in RptConfigmodeRslt\n");
+    if(nwkpara == NULL){
+        system_reload();
     }
-  else{
-    memcpy(device_info->conf.sta_ssid, nwkpara->wifi_ssid, sizeof(device_info->conf.sta_ssid));
-    memcpy(device_info->conf.sta_key, nwkpara->wifi_key, sizeof(device_info->conf.sta_key));
-    /*Clear fastlink record*/
-    memset(&(device_info->conf.fastLinkConf), 0x0, sizeof(fast_link_st));
-    updateConfiguration(device_info);
-    system_reload();
-  }
+    else{
+        memcpy(device_info->conf.sta_ssid, nwkpara->wifi_ssid, sizeof(device_info->conf.sta_ssid));
+        memcpy(device_info->conf.sta_key, nwkpara->wifi_key, sizeof(device_info->conf.sta_key));
+        /*Clear fastlink record*/
+        memset(&(device_info->conf.fastLinkConf), 0x0, sizeof(fast_link_st));
+        updateConfiguration(device_info);
+        system_reload();
+    }
 }
 /*************************************************
 * Function: connected_ap_info
@@ -602,6 +604,8 @@ void connected_ap_info(apinfo_adv_t *ap_info, char *key, int key_len)  //callbac
 {
   /*Update fastlink record*/
   int result, result1;
+  ZC_Printf("in connected_ap_info\n");
+  
   result = memcmp(&(device_info->conf.fastLinkConf.ap_info), ap_info, sizeof(ApList_adv_t));
   result1 = memcmp(&(device_info->conf.fastLinkConf.key), key, key_len);
   if(device_info->conf.fastLinkConf.availableRecord == 0||result||result1){
@@ -633,6 +637,27 @@ void WifiStatusHandler(int event)
     }
     return;
 }
+/*************************************************
+* Function: dns_ip_set
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void dns_ip_set(u8 *hostname, u32 ip)
+{
+	if((int)ip == -1)
+	{
+	    ZC_Printf("DNS ERROR");
+	}
+	else
+	{
+        u32CloudIp = ip;
+        ZC_Printf("DNS = 0x%x\n", u32CloudIp);
+        MX_WakeUp();
+	}
+}
 
 
 /*************************************************
@@ -645,11 +670,20 @@ void WifiStatusHandler(int event)
 *************************************************/
 void NetCallback(net_para_st *pnet)
 {
-  strcpy((char *)device_info->status.ip, pnet->ip);
-  strcpy((char *)device_info->status.mask, pnet->mask);
-  strcpy((char *)device_info->status.gw, pnet->gate);
-  strcpy((char *)device_info->status.dns, pnet->dns);
-  MX_WakeUp();
+    int retval;
+
+    ZC_Printf("NetCallback\n");
+
+    strcpy((char *)device_info->status.ip, pnet->ip);
+    strcpy((char *)device_info->status.mask, pnet->mask);
+    strcpy((char *)device_info->status.gw, pnet->gate);
+    strcpy((char *)device_info->status.dns, pnet->dns);
+    retval = dns_request((char*)g_struMXStaInfo.u8CloudAddr);
+    if (retval > 0)
+    {
+        u32CloudIp = retval;
+        MX_WakeUp();
+    }
 }
 
 /*************************************************
@@ -710,7 +744,6 @@ void mxchipWNet_HA_init(void)
   }
   ps_enable();
   MX_Init();
-  printf("mxchipWNet_HA_init\n");
 }
 
 
@@ -791,7 +824,6 @@ void mxchipWNet_HA_tick(void)
       {
           MX_SendDataToCloud(&g_struProtocolController.struCloudConnection);
       }
-
   }
 
   if (need_reload == 1) {

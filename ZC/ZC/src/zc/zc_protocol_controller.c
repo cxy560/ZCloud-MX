@@ -771,7 +771,7 @@ void PCT_Run()
             PCT_ConnectCloud(pstruContoller);
             break;
         case PCT_STATE_WAIT_ACCESS:
-        	PCT_SendCloudAccessMsg1(pstruContoller);        
+        	//PCT_SendCloudAccessMsg1(pstruContoller);        
             break;
         case PCT_STATE_WAIT_ACCESSRSP:
             PCT_RecvAccessMsg2(pstruContoller);
