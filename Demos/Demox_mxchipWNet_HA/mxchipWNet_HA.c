@@ -7,12 +7,14 @@
 #include <zc_protocol_controller.h>
 #include <zc_module_interface.h>
 #include <zc_timer.h>
+#include <flash_configurations.h>
 
 
 static int wifi_disalbed = 0;
 static int need_reload = 0;
 extern vu32 MS_TIMER;
 
+config_t configParas;
 
 static u8 hugebuf[1000]; // cmd, fwd data are saved in this buffer
 mxchipWNet_HA_st  *device_info;
@@ -202,6 +204,16 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
 *************************************************/
 u32 MX_FirmwareUpdate(u8 *pu8FileData, u32 u32Offset, u32 u32DataLen)
 {
+	u32 u32UpdataAddr = UPDATE_START_ADDRESS;
+
+    if (0 == u32Offset)
+    {
+        FLASH_If_Init();
+    }
+    u32UpdataAddr = u32UpdataAddr + u32Offset;
+    FLASH_If_Write(&u32UpdataAddr, (void *)pu8FileData, u32DataLen);
+    
+
     return ZC_RET_OK;
 }
 /*************************************************
@@ -214,6 +226,14 @@ u32 MX_FirmwareUpdate(u8 *pu8FileData, u32 u32Offset, u32 u32DataLen)
 *************************************************/
 u32 MX_FirmwareUpdateFinish(u32 u32TotalLen)
 {
+    memset(&configParas, 0, sizeof(boot_table_t));
+    configParas.bootTable.length = u32TotalLen;
+    configParas.bootTable.start_address = UPDATE_START_ADDRESS;
+    configParas.bootTable.type = 'A';
+    configParas.bootTable.upgrade_type = 'U';
+    updateConfig(&configParas);
+
+    FLASH_Lock();
     return ZC_RET_OK;
 }
 /*************************************************
@@ -227,12 +247,8 @@ u32 MX_FirmwareUpdateFinish(u32 u32TotalLen)
 u32 MX_SendDataToMoudle(u8 *pu8Data, u16 u16DataLen)
 {
     u8 u8MagicFlag[4] = {0x02,0x03,0x04,0x05};
-    if (PCT_EQ_STATUS_ON == g_struProtocolController.u8EqStart)
-    {
-        ZC_Printf("send to moudle\n");
-        hal_uart_send_data(u8MagicFlag,4); 
-        hal_uart_send_data(pu8Data,u16DataLen); 
-    }
+    hal_uart_send_data(u8MagicFlag,4); 
+    hal_uart_send_data(pu8Data,u16DataLen); 
     return ZC_RET_OK;
 }
 /*************************************************
@@ -385,6 +401,7 @@ u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
 {
     ZC_MessageHead *pstrMsg;
     ZC_RegisterReq *pstruRegister;
+    ZC_MessageOptHead *pstruOpt;
 
     ZC_TraceData(pu8Data, u16DataLen);
 
@@ -398,10 +415,23 @@ u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
     {
         case ZC_CODE_DESCRIBE:
         {
-            ZC_Printf("recv Moudle ZC_CODE_DESCRIBE data\n");
-            pstruRegister = (ZC_RegisterReq *)(pstrMsg + 1);
+            if ((g_struProtocolController.u8MainState >= PCT_STATE_ACCESS_NET) &&
+            (g_struProtocolController.u8MainState < PCT_STATE_DISCONNECT_CLOUD)
+            )
+            {
+                PCT_SendNotifyMsg(ZC_CODE_CLOUD_CONNECT);                
+                return ZC_RET_OK;
+            }
+            else if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
+            {
+                PCT_SendNotifyMsg(ZC_CODE_CLOUD_DISCONNECT);                
+                return ZC_RET_OK;
+            }
+            
+            pstruOpt = (ZC_MessageOptHead *)(pstrMsg + 1);
+            pstruRegister = (ZC_RegisterReq *)((u8*)(pstruOpt + 1) + ZC_HTONS(pstruOpt->OptLen));
             memcpy(g_struMXStaInfo.u8PrivateKey, pstruRegister->u8ModuleKey, ZC_MODULE_KEY_LEN);
-            memcpy(g_struMXStaInfo.u8DeviciId, (u8*)(pstruRegister+1)+sizeof(ZC_MessageOptHead), ZC_HS_DEVICE_ID_LEN);
+            memcpy(g_struMXStaInfo.u8DeviciId, (u8*)(pstruOpt+1), ZC_HS_DEVICE_ID_LEN);
             memcpy(g_struMXStaInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, pstruRegister->u8Domain, ZC_DOMAIN_LEN);
             memcpy(g_struMXStaInfo.u8EqVersion, pstruRegister->u8EqVersion, ZC_EQVERSION_LEN);
             g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET; 
@@ -412,6 +442,15 @@ u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
             }
             break;
         }
+        case ZC_CODE_ZOTA_FILE_BEGIN:
+            PCT_ModuleOtaFileBeginMsg(&g_struProtocolController, pstrMsg);
+            break;
+        case ZC_CODE_ZOTA_FILE_CHUNK:
+            PCT_ModuleOtaFileChunkMsg(&g_struProtocolController, pstrMsg);
+            break;
+        case ZC_CODE_ZOTA_FILE_END:
+            PCT_ModuleOtaFileEndMsg(&g_struProtocolController, pstrMsg);
+            break;  
         default:
             PCT_HandleMoudleEvent(pu8Data, u16DataLen);
             break;
@@ -577,11 +616,14 @@ void socket_connected(int fd)
 *************************************************/
 void RptConfigmodeRslt(network_InitTypeDef_st *nwkpara)
 {
-    ZC_Printf("in RptConfigmodeRslt\n");
-    if(nwkpara == NULL){
-        system_reload();
+    if(nwkpara == NULL)
+    {
+        ZC_Printf("open easy link\n");    
+        OpenEasylink(60*5);
     }
-    else{
+    else
+    {
+        ZC_Printf("recv config\n");    
         memcpy(device_info->conf.sta_ssid, nwkpara->wifi_ssid, sizeof(device_info->conf.sta_ssid));
         memcpy(device_info->conf.sta_key, nwkpara->wifi_key, sizeof(device_info->conf.sta_key));
         /*Clear fastlink record*/
@@ -630,6 +672,9 @@ void WifiStatusHandler(int event)
             break;
         case MXCHIP_WIFI_DOWN:
             MX_Sleep();
+        case MXCHIP_WIFI_JOIN_FAILED:
+            ZC_Printf("join fail\n");
+            break;
         default:
           break;
     }
@@ -694,54 +739,62 @@ void NetCallback(net_para_st *pnet)
 *************************************************/
 void mxchipWNet_HA_init(void)
 {
-  network_InitTypeDef_st wNetConfig;
-  network_InitTypeDef_adv_st wNetConfigAdv;
-  int err = MXCHIP_FAILED;
+    network_InitTypeDef_st wNetConfig;
+    network_InitTypeDef_adv_st wNetConfigAdv;
+    int err = MXCHIP_FAILED;
 
-  net_para_st para;
-	device_info = (mxchipWNet_HA_st *)malloc(sizeof(mxchipWNet_HA_st));
-  memset(device_info, 0, sizeof(mxchipWNet_HA_st)); 
+    net_para_st para;
+    device_info = (mxchipWNet_HA_st *)malloc(sizeof(mxchipWNet_HA_st));
+    memset(device_info, 0, sizeof(mxchipWNet_HA_st)); 
 
-  SystemCoreClockUpdate();
-	mxchipInit();
-  hal_uart_init();
-  getNetPara(&para, Station);
-  formatMACAddr((void *)device_info->status.mac, &para.mac);
-  strcpy((char *)device_info->status.ip, (char *)&para.ip);
-  strcpy((char *)device_info->status.mask, (char *)&para.mask);
-  strcpy((char *)device_info->status.gw, (char *)&para.gate);
-  strcpy((char *)device_info->status.dns, (char *)&para.dns);
+    SystemCoreClockUpdate();
+    mxchipInit();
+    hal_uart_init();
+    getNetPara(&para, Station);
+    formatMACAddr((void *)device_info->status.mac, &para.mac);
+    strcpy((char *)device_info->status.ip, (char *)&para.ip);
+    strcpy((char *)device_info->status.mask, (char *)&para.mask);
+    strcpy((char *)device_info->status.gw, (char *)&para.gate);
+    strcpy((char *)device_info->status.dns, (char *)&para.dns);
 
-  readConfiguration(device_info);
+    readConfiguration(device_info);
 
 
-  if(device_info->conf.fastLinkConf.availableRecord){ //Try fast link
-    memcpy(&wNetConfigAdv.ap_info, &device_info->conf.fastLinkConf.ap_info, sizeof(ApList_adv_t));
-    memcpy(&wNetConfigAdv.key, &device_info->conf.fastLinkConf.key, device_info->conf.fastLinkConf.key_len);
-    wNetConfigAdv.key_len = device_info->conf.fastLinkConf.key_len;
-    wNetConfigAdv.dhcpMode = DHCP_Client;
-    strcpy(wNetConfigAdv.local_ip_addr, (char*)device_info->conf.ip);
-    strcpy(wNetConfigAdv.net_mask, (char*)device_info->conf.mask);
-    strcpy(wNetConfigAdv.gateway_ip_addr, (char*)device_info->conf.gw);
-    strcpy(wNetConfigAdv.dnsServer_ip_addr, (char*)device_info->conf.dns);
-    wNetConfigAdv.wifi_retry_interval = 100;
-    err = StartAdvNetwork(&wNetConfigAdv);
-  }
+    if(device_info->conf.fastLinkConf.availableRecord){ //Try fast link
+        memcpy(&wNetConfigAdv.ap_info, &device_info->conf.fastLinkConf.ap_info, sizeof(ApList_adv_t));
+        memcpy(&wNetConfigAdv.key, &device_info->conf.fastLinkConf.key, device_info->conf.fastLinkConf.key_len);
+        wNetConfigAdv.key_len = device_info->conf.fastLinkConf.key_len;
+        wNetConfigAdv.dhcpMode = DHCP_Client;
+        strcpy(wNetConfigAdv.local_ip_addr, (char*)device_info->conf.ip);
+        strcpy(wNetConfigAdv.net_mask, (char*)device_info->conf.mask);
+        strcpy(wNetConfigAdv.gateway_ip_addr, (char*)device_info->conf.gw);
+        strcpy(wNetConfigAdv.dnsServer_ip_addr, (char*)device_info->conf.dns);
+        wNetConfigAdv.wifi_retry_interval = 100;
+        err = StartAdvNetwork(&wNetConfigAdv);
+        ZC_Printf("fast link = %d\n", err);
+    }
 
-  if(err == MXCHIP_FAILED){
-    wNetConfig.wifi_mode = Station;
-    strcpy(wNetConfig.wifi_ssid, "FAST_5F0696");//device_info->conf.sta_ssid);
-    strcpy(wNetConfig.wifi_key, "lihailei2014");//device_info->conf.sta_key);
-    wNetConfig.dhcpMode = DHCP_Client;
-    strcpy(wNetConfig.local_ip_addr, (char*)device_info->conf.ip);
-    strcpy(wNetConfig.net_mask, (char*)device_info->conf.mask);
-    strcpy(wNetConfig.gateway_ip_addr, (char*)device_info->conf.gw);
-    strcpy(wNetConfig.dnsServer_ip_addr, (char*)device_info->conf.dns);
-	  wNetConfig.wifi_retry_interval = 500;
-    StartNetwork(&wNetConfig);
-  }
-  ps_enable();
-  MX_Init();
+    if (MXCHIP_FAILED == err)
+    {
+        wNetConfig.wifi_mode = Station;
+        strcpy(wNetConfig.wifi_ssid, device_info->conf.sta_ssid);
+        strcpy(wNetConfig.wifi_key, device_info->conf.sta_key);
+        wNetConfig.dhcpMode = DHCP_Client;
+        strcpy(wNetConfig.local_ip_addr, (char*)device_info->conf.ip);
+        strcpy(wNetConfig.net_mask, (char*)device_info->conf.mask);
+        strcpy(wNetConfig.gateway_ip_addr, (char*)device_info->conf.gw);
+        strcpy(wNetConfig.dnsServer_ip_addr, (char*)device_info->conf.dns);
+          wNetConfig.wifi_retry_interval = 500;
+        err = StartNetwork(&wNetConfig);
+        ZC_Printf("nomarl link = %d\n", err);        
+    }
+    if (MXCHIP_FAILED == err)
+    {
+        OpenEasylink(60*5);
+    }
+
+    ps_enable();
+    MX_Init();
 }
 
 
