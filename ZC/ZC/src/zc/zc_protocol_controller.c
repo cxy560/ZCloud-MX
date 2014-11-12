@@ -561,6 +561,8 @@ void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *
     u32 u32FileLen;
     u32 u32RetVal;
     u32 u32RecvOffset;
+    u16 u16CalCrc;
+    u16 u16RecvCrc;
 
     ZC_Printf("Ota File Chunk\n");
     
@@ -580,7 +582,16 @@ void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *
         PCT_SendNotifyMsg(ZC_CODE_ERR);
         return;
     }
-    
+    //Check CRC
+    u16CalCrc = crc16_ccitt((u8*)(pstruOta + 1), (int)u32FileLen);
+    u16RecvCrc = (pstruMsg->TotalMsgCrc[0] << 8) + pstruMsg->TotalMsgCrc[1];
+
+    if (u16CalCrc != u16RecvCrc)
+    {
+        PCT_SendNotifyMsg(ZC_CODE_ERR);
+        return;
+    }
+ 
     u32RetVal = pstruContoller->pstruMoudleFun->pfunUpdate((u8*)(pstruOta + 1), u32RecvOffset, u32FileLen);
     //u32RetVal = ZC_RET_OK;
     ZC_Printf("offset = %d, len = %d\n", u32RecvOffset, u32FileLen);
@@ -663,6 +674,8 @@ void PCT_HandleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstr
     u32 u32FileLen;
     u32 u32RetVal;
     u32 u32RecvOffset;
+    u16 u16CalCrc;
+    u16 u16RecvCrc;
 
     ZC_Printf("Ota File Chunk\n");
 
@@ -681,6 +694,15 @@ void PCT_HandleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstr
             pstruContoller->struOtaInfo.u32RecvOffset,
             pstruContoller->struOtaInfo.u32TotalLen,
             u32FileLen);
+        PCT_SendErrorMsg(pstruMsg->MsgId, NULL, 0);
+        return;
+    }
+    //Check CRC
+    u16CalCrc = crc16_ccitt((u8*)(pstruOta + 1), (int)u32FileLen);
+    u16RecvCrc = (pstruMsg->TotalMsgCrc[0] << 8) + pstruMsg->TotalMsgCrc[1];
+
+    if (u16CalCrc != u16RecvCrc)
+    {
         PCT_SendErrorMsg(pstruMsg->MsgId, NULL, 0);
         return;
     }

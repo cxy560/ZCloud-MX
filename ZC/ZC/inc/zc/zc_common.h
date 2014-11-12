@@ -69,6 +69,8 @@ extern "C" {
 #endif
 
 void ZC_TraceData(u8* pData, u32 Len);
+unsigned short crc16_ccitt(const unsigned char *buf, int len);	
+
 #ifdef __cplusplus
 }
 #endif
