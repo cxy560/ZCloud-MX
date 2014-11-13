@@ -110,6 +110,8 @@ MX_StaInfo g_struMXStaInfo = {
 };
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
 u32 u32CloudIp;
+int g_Bcfd;
+
 /*************************************************
 * Function: is_wifi_disalbed
 * Description: 
@@ -505,6 +507,27 @@ void MX_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
     
     return;
 }
+/*************************************************
+* Function: MX_BcInit
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_BcInit()
+{
+    int tmp=1;
+    struct sockaddr_t addr;
+    addr.s_port = UDP_BROADCAST_PORT;
+
+    g_Bcfd = socket(AF_INET, SOCK_DGRM, IPPROTO_UDP); 
+
+    tmp=1; 
+    setsockopt(g_Bcfd, SOL_SOCKET,SO_BROADCAST,&tmp,sizeof(tmp)); 
+    bind(g_Bcfd, &addr, sizeof(addr));
+    return;
+}
 
 /*************************************************
 * Function: MX_Init
@@ -530,6 +553,7 @@ void MX_Init()
     
     g_u16TcpMss = 1000;
     PCT_Init(&g_struAdapter);
+    MX_BcInit();
 }
 /*************************************************
 * Function: MX_SendDataToCloud
@@ -842,6 +866,43 @@ void MX_Recvtick(void)
         }
     }
 }
+/*************************************************
+* Function: MX_SendBc
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_SendBc()
+{
+    struct sockaddr_t addr;
+    u16 u16Len;
+    static int sleepcount = 0;
+    if (PCT_STATE_CONNECT_CLOUD != g_struProtocolController.u8MainState)
+    {
+        sleepcount = 0;
+        return;
+    }
+    sleepcount++;
+    if (sleepcount > 2500)
+    {
+        memset((char*)&addr,0,sizeof(addr));
+        addr.s_ip = inet_addr("255.255.255.255"); 
+        addr.s_port = ZC_CLOUD_PORT;
+        
+        ZC_Printf("send bc\n");
+        EVENT_BuildBcMsg(g_u8MsgBuildBuffer, &u16Len);
+
+        if (g_struProtocolController.u16SendBcNum < (PCT_SEND_BC_MAX_NUM / 4))
+        {
+            sendto(g_Bcfd, g_u8MsgBuildBuffer, u16Len, 0, &addr, sizeof(struct sockaddr_t)); 
+            g_struProtocolController.u16SendBcNum++;
+        }
+        sleepcount = 0;
+    }
+    
+}
 
 /*************************************************
 * Function: mxchipWNet_HA_tick
@@ -874,6 +935,8 @@ void mxchipWNet_HA_tick(void)
         {
             MX_SendDataToCloud(&g_struProtocolController.struCloudConnection);
         }
+
+        MX_SendBc();
 
     }
 

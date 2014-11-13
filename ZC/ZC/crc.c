@@ -56,9 +56,10 @@ unsigned int crc_ta_4[16]={ /* CRC 半字节余式表 */
 unsigned int crc_cal_by_bit(const unsigned char* ptr, unsigned char len)
 {
     unsigned int crc = 0;
+    unsigned char i;
     while(len-- != 0)
     {
-        for(unsigned char i = 0x80; i != 0; i /= 2)
+        for(i = 0x80; i != 0; i /= 2)
         {
             crc *= 2;
             if((crc&0x10000) !=0) //上一位CRC乘 2后，若首位是1，则除以 0x11021
