@@ -36,7 +36,7 @@
 #define    PCT_TIMER_REGISTER               (4)
 
 #define    PCT_TIMER_INTERVAL_RECONNECT     (1000)
-#define    PCT_TIMER_INTERVAL_HEART         (1000 * 15)
+#define    PCT_TIMER_INTERVAL_HEART         (1000 * 60)
 #define    PCT_TIMER_INTERVAL_SENDMOUDLE    (1000)
 #define    PCT_TIMER_INTERVAL_REGISTER      (1000)
 

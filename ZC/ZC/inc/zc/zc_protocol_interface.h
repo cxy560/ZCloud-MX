@@ -142,6 +142,9 @@ typedef struct
 {
     u8 RandMsg[ZC_HS_MSG_LEN];
     u8 u8EqVersion[ZC_EQVERSION_LEN];
+    u8 u8WifiVerSion[ZC_EQVERSION_LEN];
+    u8 u8WifiType;    
+    u8 u8Pad[3];
 }ZC_HandShakeMsg3;
 
 

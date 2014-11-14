@@ -212,7 +212,18 @@ void PCT_SendCloudAccessMsg3(PTC_ProtocolCon *pstruContoller)
 
     memcpy(struMsg3.RandMsg, pstruContoller->RandMsg, ZC_HS_MSG_LEN);
     memcpy(struMsg3.u8EqVersion, pu8Vesion, ZC_EQVERSION_LEN);
-    
+    struMsg3.u8WifiVerSion[0] = (u8)(ZC_MODULE_VERSION >> 24);
+    struMsg3.u8WifiVerSion[1] = (u8)(ZC_MODULE_VERSION >> 16);
+    struMsg3.u8WifiVerSion[2] = (u8)(ZC_MODULE_VERSION >> 8);
+    struMsg3.u8WifiVerSion[3] = (u8)(ZC_MODULE_VERSION);
+
+    struMsg3.u8WifiType = ZC_MODULE_TYPE;
+    ZC_Printf("%d, %d, %d, %d, %d",
+        struMsg3.u8WifiVerSion[0],
+        struMsg3.u8WifiVerSion[1],
+        struMsg3.u8WifiVerSion[2],
+        struMsg3.u8WifiVerSion[3],
+        struMsg3.u8WifiType);
     /*first set key recv flag*/
     g_struProtocolController.u8keyRecv = PCT_KEY_RECVED;
 
@@ -706,7 +717,7 @@ void PCT_HandleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstr
         PCT_SendErrorMsg(pstruMsg->MsgId, NULL, 0);
         return;
     }
-    
+
     u32RetVal = pstruContoller->pstruMoudleFun->pfunUpdate((u8*)(pstruOta + 1), u32RecvOffset, u32FileLen);
     //u32RetVal = ZC_RET_OK;
     ZC_Printf("offset = %d, len = %d\n", u32RecvOffset, u32FileLen);
@@ -837,6 +848,7 @@ void PCT_HandleEvent(PTC_ProtocolCon *pstruContoller)
     ZC_Printf("event %d recv len =%d\n", pstruMsg->MsgId, ZC_HTONS(pstruMsg->Payloadlen) + sizeof(ZC_MessageHead));
     ZC_TraceData((u8*)pstruMsg, ZC_HTONS(pstruMsg->Payloadlen) + sizeof(ZC_MessageHead));
 
+    /*when do OTA, does not send empty*/
     switch (pstruMsg->MsgCode)
     {
         case ZC_CODE_ZOTA_BEGIN:
@@ -854,13 +866,18 @@ void PCT_HandleEvent(PTC_ProtocolCon *pstruContoller)
         case ZC_CODE_ZOTA_END:
             PCT_HandleOtaEndMsg(pstruContoller, pstruBuffer);
             break; 
-        default:
+        case ZC_CODE_OTA_BEGIN:
+        case ZC_CODE_OTA_FILE_BEGIN:     
+        case ZC_CODE_OTA_FILE_CHUNK:
+        case ZC_CODE_OTA_FILE_END:
+        case ZC_CODE_OTA_END:
             PCT_HandleMoudleMsg(pstruContoller, pstruBuffer);
             break;                                    
+        default:
+            PCT_HandleMoudleMsg(pstruContoller, pstruBuffer);
+            PCT_SendEmptyMsg(pstruMsg->MsgId, ZC_SEC_ALG_AES);
+            break;                                    
     }
-
-    /*send empty msg to cloud*/
-    PCT_SendEmptyMsg(pstruMsg->MsgId, ZC_SEC_ALG_AES);
 
     pstruBuffer->u32Len = 0;
     pstruBuffer->u8Status = MSG_BUFFER_IDLE;

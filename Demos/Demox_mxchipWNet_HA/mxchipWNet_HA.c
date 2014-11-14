@@ -7,14 +7,12 @@
 #include <zc_protocol_controller.h>
 #include <zc_module_interface.h>
 #include <zc_timer.h>
-#include <flash_configurations.h>
-
+#include <Flash_if.h>
 
 static int wifi_disalbed = 0;
 static int need_reload = 0;
 extern vu32 MS_TIMER;
 
-config_t configParas;
 
 static u8 hugebuf[1000]; // cmd, fwd data are saved in this buffer
 mxchipWNet_HA_st  *device_info;
@@ -228,12 +226,12 @@ u32 MX_FirmwareUpdate(u8 *pu8FileData, u32 u32Offset, u32 u32DataLen)
 *************************************************/
 u32 MX_FirmwareUpdateFinish(u32 u32TotalLen)
 {
-    memset(&configParas, 0, sizeof(boot_table_t));
-    configParas.bootTable.length = u32TotalLen;
-    configParas.bootTable.start_address = UPDATE_START_ADDRESS;
-    configParas.bootTable.type = 'A';
-    configParas.bootTable.upgrade_type = 'U';
-    updateConfig(&configParas);
+    memset(device_info, 0, sizeof(boot_table_t));
+    device_info->conf.bootTable.length = u32TotalLen;
+    device_info->conf.bootTable.start_address = UPDATE_START_ADDRESS;
+    device_info->conf.bootTable.type = 'A';
+    device_info->conf.bootTable.upgrade_type = 'U';
+    updateConfiguration(device_info);
 
     FLASH_Lock();
     return ZC_RET_OK;
@@ -444,6 +442,15 @@ u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
             }
             break;
         }
+        case ZC_CODE_EQ_BEGIN:
+        {
+            PCT_SendNotifyMsg(ZC_CODE_EQ_DONE);
+            if (g_struProtocolController.u8MainState >= PCT_STATE_ACCESS_NET)
+            {
+                PCT_SendNotifyMsg(ZC_CODE_WIFI_CONNECT);
+            }
+            break;
+        } 
         case ZC_CODE_ZOTA_FILE_BEGIN:
             PCT_ModuleOtaFileBeginMsg(&g_struProtocolController, pstrMsg);
             break;
@@ -891,7 +898,6 @@ void MX_SendBc()
         addr.s_ip = inet_addr("255.255.255.255"); 
         addr.s_port = ZC_CLOUD_PORT;
         
-        ZC_Printf("send bc\n");
         EVENT_BuildBcMsg(g_u8MsgBuildBuffer, &u16Len);
 
         if (g_struProtocolController.u16SendBcNum < (PCT_SEND_BC_MAX_NUM / 4))
