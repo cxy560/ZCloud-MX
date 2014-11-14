@@ -218,12 +218,6 @@ void PCT_SendCloudAccessMsg3(PTC_ProtocolCon *pstruContoller)
     struMsg3.u8WifiVerSion[3] = (u8)(ZC_MODULE_VERSION);
 
     struMsg3.u8WifiType = ZC_MODULE_TYPE;
-    ZC_Printf("%d, %d, %d, %d, %d",
-        struMsg3.u8WifiVerSion[0],
-        struMsg3.u8WifiVerSion[1],
-        struMsg3.u8WifiVerSion[2],
-        struMsg3.u8WifiVerSion[3],
-        struMsg3.u8WifiType);
     /*first set key recv flag*/
     g_struProtocolController.u8keyRecv = PCT_KEY_RECVED;
 
