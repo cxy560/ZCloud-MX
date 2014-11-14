@@ -73,7 +73,7 @@ typedef enum
     ZC_CODE_CLOUD_DISCONNECT,
     ZC_CODE_LOCAL_HANDSHAKE,
     ZC_CODE_DESCRIBE,                 
-    ZC_CODE_ZDESCRIBE,                
+    ZC_CODE_REST,                
 
     /*HandShake Code*/
     ZC_CODE_HANDSHAKE_1,

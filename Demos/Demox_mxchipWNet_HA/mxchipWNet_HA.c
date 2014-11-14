@@ -388,6 +388,18 @@ void MX_TimerExpired()
         }
     }
 }
+/*************************************************
+* Function: MX_Rest
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_Rest()
+{
+    OpenEasylink(60*5);
+}
 
 /*************************************************
 * Function: MX_RecvDataFromMoudle
@@ -460,6 +472,9 @@ u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
         case ZC_CODE_ZOTA_FILE_END:
             PCT_ModuleOtaFileEndMsg(&g_struProtocolController, pstrMsg);
             break;  
+        case ZC_CODE_REST:
+            MX_Rest();
+            break;
         default:
             PCT_HandleMoudleEvent(pu8Data, u16DataLen);
             break;
@@ -818,10 +833,6 @@ void mxchipWNet_HA_init(void)
           wNetConfig.wifi_retry_interval = 500;
         err = StartNetwork(&wNetConfig);
         ZC_Printf("nomarl link = %d\n", err);        
-    }
-    if (MXCHIP_FAILED == err)
-    {
-        OpenEasylink(60*5);
     }
 
     ps_enable();
