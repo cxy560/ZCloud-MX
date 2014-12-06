@@ -32,6 +32,11 @@ void ZC_TraceData(u8* pData, u32 Len)
     {
         return;
     }
+    if (0 == Len)
+    {
+        return;
+    }
+    
     ZC_Printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
     for (Index = 0; Index + 4 < Len; Index = Index + 4)
     {

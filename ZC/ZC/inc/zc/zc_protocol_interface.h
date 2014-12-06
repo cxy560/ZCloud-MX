@@ -103,11 +103,16 @@ typedef enum
     ZC_CODE_BC_INFO,
     ZC_CODE_CLIENT_ACCESS_REQ,
     ZC_CODE_CLIENT_ACCESS_RSP,
+    
+    ZC_CODE_CLIENT_QUERY_REQ,
+    ZC_CODE_CLIENT_QUERY_RSP,
+    
 }ZC_MsgCode;
 
 typedef enum 
 {
     ZC_OPT_TRANSPORT = 0,
+    ZC_OPT_APPDIRECT = 1,
 }ZC_OptCode;
 
 /*******************************Message definition***********************************/
@@ -158,13 +163,14 @@ typedef struct
 /*msg code: ZC_CODE_DESCRIBE*/
 typedef struct 
 {
-    u8  u8WifiSwVersion;            
-    u8  u8HwVersion;              
-    u8  u8ArmSwVersion;          
-    u8  u8ZigbeeSwVersion; 
+    //u8  u8WifiSwVersion;            
+    //u8  u8HwVersion;              
+    //u8  u8ArmSwVersion;          
+    //u8  u8ZigbeeSwVersion; 
     u8  u8EqVersion[ZC_EQVERSION_LEN];      //eq vision
     u8  u8ModuleKey[ZC_MODULE_KEY_LEN];
     u8  u8Domain[ZC_DOMAIN_LEN];
+    u8  u8DeviceId[ZC_HS_DEVICE_ID_LEN];
 }ZC_RegisterReq;
 
 
@@ -199,6 +205,13 @@ typedef struct
     u8 DeviceId[ZC_HS_DEVICE_ID_LEN];
 }ZC_BroadCastInfo;
 
+/*BC info£¬ send after connect with cloud£¬ in PCT_SEND_BC_MAX_NUM*/
+typedef struct
+{
+    u8 addr[4];
+}ZC_ClientQueryRsp;
+
+
 /*ZC_CODE_CLIENT_ACCESS_REQ*/
 typedef struct
 {
@@ -223,6 +236,12 @@ typedef struct
 {
     u8 DeviceId[ZC_HS_DEVICE_ID_LEN];
 }ZC_TransportInfo;
+
+/*ZC_OPT_APPDIRECT*/
+typedef struct{
+    u32 u32AppClientId;
+}ZC_AppDirectMsg;
+
 
 #endif
 /******************************* FILE END ***********************************/

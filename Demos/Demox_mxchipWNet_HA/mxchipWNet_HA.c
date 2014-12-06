@@ -14,7 +14,7 @@ static int need_reload = 0;
 extern vu32 MS_TIMER;
 
 
-static u8 hugebuf[1000]; // cmd, fwd data are saved in this buffer
+extern u8 hugebuf[1000]; // cmd, fwd data are saved in this buffer
 mxchipWNet_HA_st  *device_info;
 
 
@@ -109,6 +109,10 @@ MX_StaInfo g_struMXStaInfo = {
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
 u32 u32CloudIp;
 int g_Bcfd;
+u8 g_u8ClientCiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
+u8 g_u8ClientSendLen = 0;
+MSG_Buffer g_struClientBuffer;
+u32 g_u32GloablIp;
 
 /*************************************************
 * Function: is_wifi_disalbed
@@ -173,7 +177,7 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
     
     ZC_Printf("0x%x.0x%x.0x%x.0x%x\n", u8Ip[0],u8Ip[1],u8Ip[2],u8Ip[3]);
 #endif    
-    addr.s_ip = inet_addr("192.168.1.111"); 
+    addr.s_ip = inet_addr("42.62.41.75"); 
     addr.s_port = ZC_CLOUD_PORT;
     fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     setsockopt(fd,0,SO_BLOCKMODE,&opt,4);
@@ -400,102 +404,39 @@ void MX_Rest()
 {
     OpenEasylink(60*5);
 }
-
 /*************************************************
-* Function: MX_RecvDataFromMoudle
+* Function: MX_SendDataToNet
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-u32 MX_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
+void MX_SendDataToNet(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
 {
-    ZC_MessageHead *pstrMsg;
-    ZC_RegisterReq *pstruRegister;
-    ZC_MessageOptHead *pstruOpt;
-
-    ZC_TraceData(pu8Data, u16DataLen);
-
-    if (0 == u16DataLen)
-    {
-        return ZC_RET_ERROR;
-    }
-    
-    pstrMsg = (ZC_MessageHead *)pu8Data;
-    switch(pstrMsg->MsgCode)
-    {
-        case ZC_CODE_DESCRIBE:
-        {
-            if ((g_struProtocolController.u8MainState >= PCT_STATE_ACCESS_NET) &&
-            (g_struProtocolController.u8MainState < PCT_STATE_DISCONNECT_CLOUD)
-            )
-            {
-                PCT_SendNotifyMsg(ZC_CODE_CLOUD_CONNECT);                
-                return ZC_RET_OK;
-            }
-            else if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
-            {
-                PCT_SendNotifyMsg(ZC_CODE_CLOUD_DISCONNECT);                
-                return ZC_RET_OK;
-            }
-            
-            pstruOpt = (ZC_MessageOptHead *)(pstrMsg + 1);
-            pstruRegister = (ZC_RegisterReq *)((u8*)(pstruOpt + 1) + ZC_HTONS(pstruOpt->OptLen));
-            memcpy(g_struMXStaInfo.u8PrivateKey, pstruRegister->u8ModuleKey, ZC_MODULE_KEY_LEN);
-            memcpy(g_struMXStaInfo.u8DeviciId, (u8*)(pstruOpt+1), ZC_HS_DEVICE_ID_LEN);
-            memcpy(g_struMXStaInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, pstruRegister->u8Domain, ZC_DOMAIN_LEN);
-            memcpy(g_struMXStaInfo.u8EqVersion, pstruRegister->u8EqVersion, ZC_EQVERSION_LEN);
-            g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET; 
-            if (PCT_TIMER_INVAILD != g_struProtocolController.u8RegisterTimer)
-            {
-                TIMER_StopTimer(g_struProtocolController.u8RegisterTimer);
-                g_struProtocolController.u8RegisterTimer = PCT_TIMER_INVAILD;
-            }
-            break;
-        }
-        case ZC_CODE_EQ_BEGIN:
-        {
-            PCT_SendNotifyMsg(ZC_CODE_EQ_DONE);
-            if (g_struProtocolController.u8MainState >= PCT_STATE_ACCESS_NET)
-            {
-                PCT_SendNotifyMsg(ZC_CODE_WIFI_CONNECT);
-            }
-            break;
-        } 
-        case ZC_CODE_ZOTA_FILE_BEGIN:
-            PCT_ModuleOtaFileBeginMsg(&g_struProtocolController, pstrMsg);
-            break;
-        case ZC_CODE_ZOTA_FILE_CHUNK:
-            PCT_ModuleOtaFileChunkMsg(&g_struProtocolController, pstrMsg);
-            break;
-        case ZC_CODE_ZOTA_FILE_END:
-            PCT_ModuleOtaFileEndMsg(&g_struProtocolController, pstrMsg);
-            break;  
-        case ZC_CODE_REST:
-            MX_Rest();
-            break;
-        default:
-            PCT_HandleMoudleEvent(pu8Data, u16DataLen);
-            break;
-    }
-    
-    return ZC_RET_OK;
+    send(u32Fd, pu8Data, u16DataLen, 0);
 }
 
 /*************************************************
-* Function: MX_Moudlefunc
+* Function: MX_StoreRegisterInfor
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-void MX_Moudlefunc(u8 *pu8Data, u32 u32DataLen) 
+u32 MX_StoreRegisterInfor(u8 *pu8Data, u16 u16DataLen)
 {
-    MX_RecvDataFromMoudle(pu8Data + sizeof(RCTRL_STRU_MSGHEAD), 
-        u32DataLen - sizeof(RCTRL_STRU_MSGHEAD));
-    return; 
+    ZC_RegisterReq *pstruRegister;
+
+    pstruRegister = (ZC_RegisterReq *)(pu8Data);
+
+    memcpy(g_struMXStaInfo.u8PrivateKey, pstruRegister->u8ModuleKey, ZC_MODULE_KEY_LEN);
+    memcpy(g_struMXStaInfo.u8DeviciId, pstruRegister->u8DeviceId, ZC_HS_DEVICE_ID_LEN);
+    memcpy(g_struMXStaInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, pstruRegister->u8Domain, ZC_DOMAIN_LEN);
+    memcpy(g_struMXStaInfo.u8EqVersion, pstruRegister->u8EqVersion, ZC_EQVERSION_LEN);
+    
+    return ZC_RET_OK;
 }
 
 /*************************************************
@@ -530,6 +471,42 @@ void MX_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
     return;
 }
 /*************************************************
+* Function: MX_ListenClient
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+u32 MX_ListenClient(PTC_Connection *pstruConnection)
+{
+    int fd; 
+    struct sockaddr_t servaddr;
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(fd<0)
+        return ZC_RET_ERROR;
+
+    servaddr.s_port = pstruConnection->u16Port;
+    if(bind(fd,(struct sockaddr_t *)&servaddr,sizeof(servaddr))<0)
+    {
+        close(fd);
+        return ZC_RET_ERROR;
+    }
+    
+    if (listen(fd, 4)< 0)
+    {
+        close(fd);
+        return ZC_RET_ERROR;
+    }
+
+    ZC_Printf("Tcp Listen Port = %d\n", pstruConnection->u16Port);
+    g_struProtocolController.struClientConnection.u32Socket = fd;
+
+    return ZC_RET_OK;
+}
+
+/*************************************************
 * Function: MX_BcInit
 * Description: 
 * Author: cxy 
@@ -541,7 +518,7 @@ void MX_BcInit()
 {
     int tmp=1;
     struct sockaddr_t addr;
-    addr.s_port = UDP_BROADCAST_PORT;
+    addr.s_port = ZC_MOUDLE_PORT;
 
     g_Bcfd = socket(AF_INET, SOCK_DGRM, IPPROTO_UDP); 
 
@@ -572,6 +549,11 @@ void MX_Init()
     g_struAdapter.pfunGetDeviceId = MX_GetDeviceId;   
     g_struAdapter.pfunSetTimer = MX_SetTimer;   
     g_struAdapter.pfunStopTimer = MX_StopTimer;
+    g_struAdapter.pfunListenClient = MX_ListenClient;
+
+    g_struAdapter.pfunSendToNet = MX_SendDataToNet;   
+    g_struAdapter.pfunStoreInfo = MX_StoreRegisterInfor;
+    g_struAdapter.pfunRest = MX_Rest;
     
     g_u16TcpMss = 1000;
     PCT_Init(&g_struAdapter);
@@ -744,7 +726,7 @@ void dns_ip_set(u8 *hostname, u32 ip)
 	{
         u32CloudIp = ip;
         ZC_Printf("DNS = 0x%x\n", u32CloudIp);
-        MX_WakeUp();
+        //MX_WakeUp();
 	}
 }
 
@@ -761,18 +743,60 @@ void NetCallback(net_para_st *pnet)
 {
     int retval;
 
-    ZC_Printf("NetCallback\n");
+    ZC_Printf("wifi connect\n");
 
     strcpy((char *)device_info->status.ip, pnet->ip);
     strcpy((char *)device_info->status.mask, pnet->mask);
     strcpy((char *)device_info->status.gw, pnet->gate);
     strcpy((char *)device_info->status.dns, pnet->dns);
+
+    g_u32GloablIp = inet_addr((char *)device_info->status.ip);
     retval = dns_request((char*)g_struMXStaInfo.u8CloudAddr);
     if (retval > 0)
     {
         u32CloudIp = retval;
-        MX_WakeUp();
     }
+    
+    MX_WakeUp();
+}
+/*************************************************
+* Function: HF_WriteDataToFlash
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_WriteDataToFlash(mxchipWNet_HA_st *configData)
+{
+  uint32_t paraStartAddress, paraEndAddress;
+  uint32_t next;
+  
+  paraStartAddress = PARA_START_ADDRESS;
+  paraEndAddress = PARA_END_ADDRESS;
+  next = paraStartAddress + sizeof(mxchipWNet_HA_config_st);
+  FLASH_If_Init();
+  FLASH_If_Erase(paraStartAddress , paraEndAddress); 
+  FLASH_If_Write(&paraStartAddress, (u32 *)&configData->conf, sizeof(mxchipWNet_HA_config_st));
+  FLASH_If_Byte_Write(&next, (u8*)&g_struMXStaInfo, sizeof(MX_StaInfo));
+  FLASH_Lock();
+}
+
+
+/*************************************************
+* Function: MX_ReadDataFormFlash
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_ReadDataFormFlash(void) 
+{
+    u32 configInFlash;
+    
+    configInFlash = PARA_START_ADDRESS ;
+    memcpy(&g_struMXStaInfo, (void *)(configInFlash + sizeof(mxchipWNet_HA_config_st)), sizeof(MX_StaInfo));
 }
 
 /*************************************************
@@ -805,6 +829,9 @@ void mxchipWNet_HA_init(void)
 
     readConfiguration(device_info);
 
+    //MX_WriteDataToFlash(device_info);
+    MX_ReadDataFormFlash();
+    
 
     if(device_info->conf.fastLinkConf.availableRecord){ //Try fast link
         memcpy(&wNetConfigAdv.ap_info, &device_info->conf.fastLinkConf.ap_info, sizeof(ApList_adv_t));
@@ -823,8 +850,8 @@ void mxchipWNet_HA_init(void)
     if (MXCHIP_FAILED == err)
     {
         wNetConfig.wifi_mode = Station;
-        strcpy(wNetConfig.wifi_ssid, device_info->conf.sta_ssid);
-        strcpy(wNetConfig.wifi_key, device_info->conf.sta_key);
+        strcpy(wNetConfig.wifi_ssid, "FAST_5F0696");//device_info->conf.sta_ssid);
+        strcpy(wNetConfig.wifi_key, "lihailei2014");//device_info->conf.sta_key);
         wNetConfig.dhcpMode = DHCP_Client;
         strcpy(wNetConfig.local_ip_addr, (char*)device_info->conf.ip);
         strcpy(wNetConfig.net_mask, (char*)device_info->conf.mask);
@@ -852,20 +879,40 @@ void MX_Recvtick(void)
 {
     int s32RecvLen;
     fd_set readfds;
+    u32 u32Index;
     int fd;
     struct timeval_t t;
+    int connfd;
+    struct sockaddr_t addr;
+    int tmp=1;    
+    ZC_ClientQueryRsp struRsp;
+    u16 u16Len;
 
     fd = g_struProtocolController.struCloudConnection.u32Socket;
     FD_ZERO(&readfds);
     t.tv_sec = 0;
     t.tv_usec = 1000;
 
+    FD_SET(g_Bcfd, &readfds);
+
     if(PCT_INVAILD_SOCKET != fd)
     {
         FD_SET(fd, &readfds);      
     }
+    
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        FD_SET(g_struProtocolController.struClientConnection.u32Socket, &readfds);
+    }
 
-
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            FD_SET(g_struClientInfo.u32ClientFd[u32Index], &readfds);
+        }
+    }
+    
     select(1, &readfds, NULL, NULL, &t);
 
     if(PCT_INVAILD_SOCKET != fd)
@@ -883,6 +930,65 @@ void MX_Recvtick(void)
             }
         }
     }
+
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            if (FD_ISSET(g_struClientInfo.u32ClientFd[u32Index], &readfds))
+            {
+                s32RecvLen = recv(g_struClientInfo.u32ClientFd[u32Index], hugebuf, 1000, 0); 
+                if (s32RecvLen > 0)
+                {
+                    ZC_RecvDataFromClient(g_struClientInfo.u32ClientFd[u32Index], hugebuf, s32RecvLen);
+                }
+                else
+                {   
+                    ZC_ClientDisconnect(g_struClientInfo.u32ClientFd[u32Index]);
+                    close(g_struClientInfo.u32ClientFd[u32Index]);
+                }
+                
+            }
+        }
+        
+    }
+    
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        if (FD_ISSET(g_struProtocolController.struClientConnection.u32Socket, &readfds))
+        {
+            connfd = accept(g_struProtocolController.struClientConnection.u32Socket,(struct sockaddr_t *)&addr,&tmp);
+    
+            if (ZC_RET_ERROR == ZC_ClientConnect((u32)connfd))
+            {
+                close(connfd);
+            }
+            else
+            {
+                ZC_Printf("accept client = %d", connfd);
+            }
+        }
+    }
+    if (FD_ISSET(g_Bcfd, &readfds))
+    {
+        tmp = sizeof(addr); 
+        s32RecvLen = recvfrom(g_Bcfd, g_u8MsgBuildBuffer, 100, 0, (struct sockaddr_t *)&addr, (socklen_t*)&tmp); 
+        if(s32RecvLen > 0) 
+        {
+        
+            memset((char*)&addr,0,sizeof(addr));
+            addr.s_ip = inet_addr("255.255.255.255"); 
+            addr.s_port = ZC_MOUDLE_BROADCAST_PORT;
+
+            struRsp.addr[0] = (g_u32GloablIp >> 24) & 0xff;
+            struRsp.addr[1] = (g_u32GloablIp >> 16) & 0xff;       
+            struRsp.addr[2] = (g_u32GloablIp >> 8)  & 0xff; 
+            struRsp.addr[3] = g_u32GloablIp & 0xff;       
+            EVENT_BuildMsg(ZC_CODE_CLIENT_QUERY_RSP, 0, g_u8MsgBuildBuffer, &u16Len, (u8*)&struRsp, sizeof(ZC_ClientQueryRsp));
+
+            sendto(g_Bcfd,g_u8MsgBuildBuffer,u16Len,0,(struct sockaddr_t *)&addr,sizeof(addr));             
+        } 
+    }    
 }
 /*************************************************
 * Function: MX_SendBc
@@ -907,7 +1013,7 @@ void MX_SendBc()
     {
         memset((char*)&addr,0,sizeof(addr));
         addr.s_ip = inet_addr("255.255.255.255"); 
-        addr.s_port = ZC_CLOUD_PORT;
+        addr.s_port = ZC_MOUDLE_BROADCAST_PORT;
         
         EVENT_BuildBcMsg(g_u8MsgBuildBuffer, &u16Len);
 
@@ -932,11 +1038,14 @@ void MX_SendBc()
 void mxchipWNet_HA_tick(void)
 {
     int fd;
-
+    u32 u32Timer = 0;
+    
     mxchipTick();
     MX_TimerExpired();
     if (!is_wifi_disalbed()) 
     {
+        ZC_StartClientListen();
+        
         fd = g_struProtocolController.struCloudConnection.u32Socket;
         MX_Recvtick();
 
@@ -945,7 +1054,9 @@ void mxchipWNet_HA_tick(void)
         if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
         {
             close(fd);
-            PCT_ReconnectCloud(&g_struProtocolController);
+            u32Timer = rand();
+            u32Timer = (PCT_TIMER_INTERVAL_RECONNECT) * (u32Timer % 10 + 1);
+            PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
           
         }
         else

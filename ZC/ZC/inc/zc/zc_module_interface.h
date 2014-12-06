@@ -16,10 +16,27 @@
 #define ZC_MODULE_TRACE_FLAG  (0x01020304)       
 #define ZC_MODULE_DATA_FLAG   (0x02030405)       
 
-typedef struct tag_RCTRL_STRU_MSGHEAD
+#define ZC_MAGIC_LEN          (4)  
+#define ZC_MAX_UARTBUF_LEN    (1000)
+
+typedef struct
 {
-    u32 MsgFlag;        /*byte0:0x76, byte1:0x81, byte2:0x43, byte3:0x50*/
-}RCTRL_STRU_MSGHEAD;
+    u32 u32Status;
+    u32 u32RecvLen;
+    u8  u8UartBuffer[ZC_MAX_UARTBUF_LEN];
+}ZC_UartBuffer;
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen);
+u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg);
+u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen);
+void ZC_Moudlefunc(u8 *pu8Data, u32 u32DataLen);
+
+
 #ifdef __cplusplus
 }
 #endif

@@ -38,6 +38,7 @@ void readConfiguration(mxchipWNet_HA_st *configData)
   u32 configInFlash;
   configInFlash = PARA_START_ADDRESS;
   memcpy(&configData->conf, (void *)configInFlash, sizeof(mxchipWNet_HA_config_st));
+
   if(configData->conf.magicNumber != MAGIC_FLAG||configData->conf.versionNumber != CONFIGURATION_VERSION){
     restoreConfiguration();
     NVIC_SystemReset(); 
