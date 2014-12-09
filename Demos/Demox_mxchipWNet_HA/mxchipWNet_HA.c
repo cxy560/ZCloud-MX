@@ -810,8 +810,6 @@ void MX_ReadDataFormFlash(void)
 void mxchipWNet_HA_init(void)
 {
     network_InitTypeDef_st wNetConfig;
-    network_InitTypeDef_adv_st wNetConfigAdv;
-    int err = MXCHIP_FAILED;
 
     net_para_st para;
     device_info = (mxchipWNet_HA_st *)malloc(sizeof(mxchipWNet_HA_st));
@@ -831,36 +829,17 @@ void mxchipWNet_HA_init(void)
 
     //MX_WriteDataToFlash(device_info);
     MX_ReadDataFormFlash();
-    
 
-    if(device_info->conf.fastLinkConf.availableRecord){ //Try fast link
-        memcpy(&wNetConfigAdv.ap_info, &device_info->conf.fastLinkConf.ap_info, sizeof(ApList_adv_t));
-        memcpy(&wNetConfigAdv.key, &device_info->conf.fastLinkConf.key, device_info->conf.fastLinkConf.key_len);
-        wNetConfigAdv.key_len = device_info->conf.fastLinkConf.key_len;
-        wNetConfigAdv.dhcpMode = DHCP_Client;
-        strcpy(wNetConfigAdv.local_ip_addr, (char*)device_info->conf.ip);
-        strcpy(wNetConfigAdv.net_mask, (char*)device_info->conf.mask);
-        strcpy(wNetConfigAdv.gateway_ip_addr, (char*)device_info->conf.gw);
-        strcpy(wNetConfigAdv.dnsServer_ip_addr, (char*)device_info->conf.dns);
-        wNetConfigAdv.wifi_retry_interval = 100;
-        err = StartAdvNetwork(&wNetConfigAdv);
-        ZC_Printf("fast link = %d\n", err);
-    }
-
-    if (MXCHIP_FAILED == err)
-    {
-        wNetConfig.wifi_mode = Station;
-        strcpy(wNetConfig.wifi_ssid, "FAST_5F0696");//device_info->conf.sta_ssid);
-        strcpy(wNetConfig.wifi_key, "lihailei2014");//device_info->conf.sta_key);
-        wNetConfig.dhcpMode = DHCP_Client;
-        strcpy(wNetConfig.local_ip_addr, (char*)device_info->conf.ip);
-        strcpy(wNetConfig.net_mask, (char*)device_info->conf.mask);
-        strcpy(wNetConfig.gateway_ip_addr, (char*)device_info->conf.gw);
-        strcpy(wNetConfig.dnsServer_ip_addr, (char*)device_info->conf.dns);
-          wNetConfig.wifi_retry_interval = 500;
-        err = StartNetwork(&wNetConfig);
-        ZC_Printf("nomarl link = %d\n", err);        
-    }
+    wNetConfig.wifi_mode = Station;
+    strcpy(wNetConfig.wifi_ssid, device_info->conf.sta_ssid);
+    strcpy(wNetConfig.wifi_key, device_info->conf.sta_key);
+    wNetConfig.dhcpMode = DHCP_Client;
+    strcpy(wNetConfig.local_ip_addr, (char*)device_info->conf.ip);
+    strcpy(wNetConfig.net_mask, (char*)device_info->conf.mask);
+    strcpy(wNetConfig.gateway_ip_addr, (char*)device_info->conf.gw);
+    strcpy(wNetConfig.dnsServer_ip_addr, (char*)device_info->conf.dns);
+      wNetConfig.wifi_retry_interval = 500;
+    (void)StartNetwork(&wNetConfig);
 
     ps_enable();
     MX_Init();

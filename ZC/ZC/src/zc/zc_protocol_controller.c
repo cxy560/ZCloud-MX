@@ -37,6 +37,8 @@ u32 PCT_CheckCrc(u8 *pu8Crc, u8 *pu8Data, u16 u16Len)
     }
     else
     {
+        ZC_Printf("Crc is error, recv = %d, calc = %d\n", u16RecvCrc, u16Crc);    
+        
         return ZC_RET_ERROR;    
     }
 }
@@ -883,11 +885,15 @@ void PCT_HandleEvent(PTC_ProtocolCon *pstruContoller)
     
     pstruMsg = (ZC_MessageHead*)pstruBuffer->u8MsgBuffer;
     ZC_Printf("event %d recv len =%d\n", pstruMsg->MsgId, ZC_HTONS(pstruMsg->Payloadlen) + sizeof(ZC_MessageHead));
-
+    ZC_TraceData((u8*)pstruMsg, ZC_HTONS(pstruMsg->Payloadlen) + sizeof(ZC_MessageHead));
     if (ZC_RET_ERROR == PCT_CheckCrc(pstruMsg->TotalMsgCrc, (u8*)(pstruMsg + 1), ZC_HTONS(pstruMsg->Payloadlen)))
     {
         PCT_SendEmptyMsg(pstruMsg->MsgId, ZC_SEC_ALG_AES);
         PCT_SendErrorMsg(pstruMsg->MsgId, NULL, 0);
+
+        pstruBuffer->u32Len = 0;
+        pstruBuffer->u8Status = MSG_BUFFER_IDLE;
+        
         return;
     }
     

@@ -53,7 +53,7 @@ unsigned int crc_ta_4[16]={ /* CRC 半字节余式表 */
   函数返回值：unsigned int
   多项式采用CRC-CCITT 0x1021
 */
-unsigned int crc_cal_by_bit(const unsigned char* ptr, unsigned char len)
+unsigned int crc_cal_by_bit(const unsigned char* ptr, unsigned int len)
 {
     unsigned int crc = 0;
     unsigned char i;
@@ -86,7 +86,7 @@ unsigned int crc_cal_by_bit(const unsigned char* ptr, unsigned char len)
   函数返回值：unsigned int
   多项式采用CRC-CCITT 0x1021
 */
-unsigned int crc_cal_by_byte(const unsigned char* ptr, unsigned char len)
+unsigned int crc_cal_by_byte(const unsigned char* ptr, unsigned int len)
 {
     unsigned short crc = 0;
 
@@ -109,7 +109,7 @@ unsigned int crc_cal_by_byte(const unsigned char* ptr, unsigned char len)
   函数返回值：unsigned int
   多项式采用CRC-CCITT  0x1021
 */
-unsigned int crc_cal_by_halfbyte(const unsigned char* ptr, unsigned char len)
+unsigned int crc_cal_by_halfbyte(const unsigned char* ptr, unsigned int len)
 {
     unsigned short crc = 0;
 
@@ -129,7 +129,7 @@ unsigned int crc_cal_by_halfbyte(const unsigned char* ptr, unsigned char len)
     return crc;
 }
 
-unsigned short crc16_ccitt(const unsigned char *buf, int len)
+unsigned short crc16_ccitt(const unsigned char *buf, unsigned int len)
 {
 	return crc_cal_by_bit(buf,len);
 
