@@ -29,6 +29,7 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
     u32 u32Offset = 0;
     u16 u16RealLen;
     ZC_MessageOptHead *pstruOpt;
+    ZC_SecHead struSecHead;
     ZC_AppDirectMsg *pstruAppDirect;
     ZC_SendParam struParam;
 
@@ -43,17 +44,25 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
             u16RealLen = ZC_HTONS(pstruMsg->Payloadlen)
                             - (sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen));
 
+            /*copy sec head*/
+            struSecHead.u16TotalMsg = ZC_HTONS(u16RealLen + sizeof(ZC_MessageHead));
+            struSecHead.u8SecType = ZC_SEC_ALG_NONE;
+            
+            memcpy(g_u8MsgBuildBuffer, &struSecHead, sizeof(ZC_SecHead));
+            
             pstruMsg->Payloadlen = ZC_HTONS(u16RealLen);
 
-            memcpy(g_u8MsgBuildBuffer, (u8*)pstruMsg, u32Offset);
+            /*copy msg*/
+            memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), (u8*)pstruMsg, u32Offset);
 
-            memcpy(g_u8MsgBuildBuffer + u32Offset, 
+            memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead) + u32Offset, 
                 (u8*)pstruMsg + u32Offset + sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen),
                 (u16RealLen + sizeof(ZC_MessageHead)) - u32Offset);
 
             pstruAppDirect = (ZC_AppDirectMsg *)(pstruOpt+1);
 
-            g_u8ClientSendLen = u16RealLen + sizeof(ZC_MessageHead);
+            /*msg len include sec head, msg head, payload len*/
+            g_u8ClientSendLen = u16RealLen + sizeof(ZC_MessageHead) + sizeof(ZC_SecHead);
 
             struParam.u8NeedPoll = 1;
 

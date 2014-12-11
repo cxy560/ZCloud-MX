@@ -85,7 +85,7 @@ void ZC_ClientInit(void)
 * Parameter: 
 * History:
 *************************************************/
-u32 ZC_CheckClientIdle(void)
+u32 ZC_CheckClientIdle(u32 u32Fd)
 {
     if (ZC_CLIENT_STATUS_IDLE == g_struClientInfo.u8ClientStates)
     {
@@ -93,7 +93,15 @@ u32 ZC_CheckClientIdle(void)
     }
     else
     {
-        return ZC_RET_ERROR;    
+        if (u32Fd == g_struClientInfo.u32ClientBusyId)
+        {
+            return ZC_RET_OK;
+        }
+        else
+        {
+            return ZC_RET_ERROR;    
+        }
+        
     }
 }
 /*************************************************
@@ -107,6 +115,7 @@ u32 ZC_CheckClientIdle(void)
 void ZC_SetClientBusy(u32 u32Clientfd)
 {
     g_struClientInfo.u8ClientStates = ZC_CLIENT_STATUS_BUSY;
+    g_struClientInfo.u32ClientBusyId = u32Clientfd;
 }
 /*************************************************
 * Function: PCT_SetClientFree
@@ -191,7 +200,7 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
     ZC_SendParam struParam;
 
     /*can hanle it*/
-    u32RetVal = ZC_CheckClientIdle();
+    u32RetVal = ZC_CheckClientIdle(ClientId);
     if (ZC_RET_ERROR == u32RetVal)
     {
         EVENT_BuildMsg(ZC_CODE_ERR, 0, g_u8MsgBuildBuffer, &u16Len, 
