@@ -106,7 +106,8 @@ typedef enum
     
     ZC_CODE_CLIENT_QUERY_REQ,
     ZC_CODE_CLIENT_QUERY_RSP,
-    
+
+    ZC_CODE_TOKEN_SET,
 }ZC_MsgCode;
 
 typedef enum 
@@ -160,6 +161,11 @@ typedef struct
     u8 RandMsg[ZC_HS_MSG_LEN];
 }ZC_HandShakeMsg4;
 
+typedef struct
+{
+    u8 TokenKey[ZC_HS_SESSION_KEY_LEN];
+}ZC_TokenSetReq;
+
 /*msg code: ZC_CODE_DESCRIBE*/
 typedef struct 
 {
@@ -201,15 +207,22 @@ typedef struct
 /*BC info£¬ send after connect with cloud£¬ in PCT_SEND_BC_MAX_NUM*/
 typedef struct
 {
-    u8 RandMsg[ZC_HS_MSG_LEN];
     u8 DeviceId[ZC_HS_DEVICE_ID_LEN];
+    u8 RandMsg[ZC_HS_MSG_LEN];
 }ZC_BroadCastInfo;
 
 /*BC info£¬ send after connect with cloud£¬ in PCT_SEND_BC_MAX_NUM*/
 typedef struct
 {
     u8 addr[4];
+    u8 DeviceId[ZC_HS_DEVICE_ID_LEN];
 }ZC_ClientQueryRsp;
+
+/*find eq*/
+typedef struct
+{
+    u8  u8Domain[ZC_DOMAIN_LEN];
+}ZC_ClientQueryReq;
 
 
 /*ZC_CODE_CLIENT_ACCESS_REQ*/

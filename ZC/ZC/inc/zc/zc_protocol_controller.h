@@ -56,6 +56,12 @@
 #define    PCT_OTA_REST_ON       (1)
 #define    PCT_OTA_REST_OFF       (0)
 
+#define    ZC_GET_TYPE_CLOUDKEY    (0)
+#define    ZC_GET_TYPE_DEVICEID    (1)
+#define    ZC_GET_TYPE_PRIVATEKEY  (2)
+#define    ZC_GET_TYPE_VESION      (3)
+#define    ZC_GET_TYPE_TOKENKEY    (4)
+
 
 typedef struct
 {
@@ -76,8 +82,11 @@ typedef void (*pFunSendNetData)(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendP
 typedef u32 (*pFunFirmwareUpdate)(u8 *pu8FileData, u32 u32Offset, u32 u32DataLen);
 typedef u32 (*pFunFirmwareUpdateFinish)(u32 u32TotalLen);
 typedef u32 (*pFunSendDataToMoudle)(u8 *pu8Data, u16 u16DataLen);
-typedef u32 (*pFunStoreInfo)(u8 *pu8Data, u16 u16DataLen);
+typedef u32 (*pFunStoreInfo)(u8 u8Type, u8 *pu8Data, u16 u16DataLen);
 typedef u32 (*pFunRecvDataFromMoudle)(u8 *pu8Data, u16 u16DataLen);
+typedef u32 (*pFunGetStoreInfo)(u8 u8Type, u8 **pu8Data);
+
+
 typedef u32 (*pFunGetCloudKey)(u8 **pu8Key);
 typedef u32 (*pFunGetPrivateKey)(u8 **pu8Key);
 typedef u32 (*pFunGetVersion)(u8 **pu8Version);
@@ -102,10 +111,7 @@ typedef struct
     pFunRest                    pfunRest;
     
     /*config function*/
-    pFunGetCloudKey             pfunGetCloudKey;
-    pFunGetPrivateKey           pfunGetPrivateKey;
-    pFunGetVersion              pfunGetVersion;
-    pFunGetDeviceId             pfunGetDeviceId;
+    pFunGetStoreInfo            pfunGetStoreInfo;
     pFunSetTimer                pfunSetTimer;
     pFunStopTimer               pfunStopTimer;
 }PTC_ModuleAdapter;

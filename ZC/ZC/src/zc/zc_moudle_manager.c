@@ -28,10 +28,12 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
     u32 u32Index;
     u32 u32Offset = 0;
     u16 u16RealLen;
+    u32 u32CiperLen;
     ZC_MessageOptHead *pstruOpt;
     ZC_SecHead struSecHead;
     ZC_AppDirectMsg *pstruAppDirect;
     ZC_SendParam struParam;
+    u8 *pu8Key;
 
     u32Offset = sizeof(ZC_MessageHead);
     for (u32Index = 0; u32Index < pstruMsg->OptNum; u32Index++)
@@ -43,12 +45,6 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
 
             u16RealLen = ZC_HTONS(pstruMsg->Payloadlen)
                             - (sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen));
-
-            /*copy sec head*/
-            struSecHead.u16TotalMsg = ZC_HTONS(u16RealLen + sizeof(ZC_MessageHead));
-            struSecHead.u8SecType = ZC_SEC_ALG_NONE;
-            
-            memcpy(g_u8MsgBuildBuffer, &struSecHead, sizeof(ZC_SecHead));
             
             pstruMsg->Payloadlen = ZC_HTONS(u16RealLen);
 
@@ -61,8 +57,23 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
 
             pstruAppDirect = (ZC_AppDirectMsg *)(pstruOpt+1);
 
+            
+            g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
+
+            AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16RealLen + sizeof(ZC_MessageHead),
+                pu8Key, 16,
+                pu8Key, 16,
+                g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u32CiperLen);
+
+            /*copy sec head*/
+            struSecHead.u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
+            struSecHead.u8SecType = ZC_SEC_ALG_AES;
+            
+            memcpy(g_u8MsgBuildBuffer, &struSecHead, sizeof(ZC_SecHead));
+
+
             /*msg len include sec head, msg head, payload len*/
-            g_u8ClientSendLen = u16RealLen + sizeof(ZC_MessageHead) + sizeof(ZC_SecHead);
+            g_u8ClientSendLen = u32CiperLen + sizeof(ZC_SecHead);
 
             struParam.u8NeedPoll = 1;
 
@@ -125,7 +136,7 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
                 return ZC_RET_OK;
             }
             
-            g_struProtocolController.pstruMoudleFun->pfunStoreInfo((u8*)(pstrMsg + 1), sizeof(ZC_RegisterReq));
+            g_struProtocolController.pstruMoudleFun->pfunStoreInfo(0, (u8*)(pstrMsg + 1), sizeof(ZC_RegisterReq));
 
             g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET; 
             
@@ -175,7 +186,7 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
 * Parameter: 
 * History:
 *************************************************/
-u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen) 
+u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen, u32 *pu32LeftLen) 
 {
     ZC_MessageHead *pstruMsg;
     u8 u8MagicHead[ZC_MAGIC_LEN] = {0x02,0x03,0x04,0x05};
@@ -184,6 +195,8 @@ u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen)
     u32 u32MagicLen = ZC_MAGIC_LEN;
 
     u32HeadLen = u32MagicLen + sizeof(ZC_MessageHead);
+    *pu32LeftLen = 0;
+    
     if (MSG_BUFFER_FULL == g_struUartBuffer.u32Status)
     {
         return ZC_RET_ERROR;
@@ -222,6 +235,7 @@ u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen)
                 memcpy(g_struUartBuffer.u8UartBuffer, pu8Data, u32MsgLen);
                 g_struUartBuffer.u32Status = MSG_BUFFER_FULL;
                 g_struUartBuffer.u32RecvLen = u32MsgLen;
+                *pu32LeftLen = u32DataLen - u32MsgLen;
             }
             else
             {
@@ -249,6 +263,7 @@ u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen)
 
             g_struUartBuffer.u32Status = MSG_BUFFER_FULL;
             g_struUartBuffer.u32RecvLen = u32MsgLen;
+           *pu32LeftLen = u32DataLen + g_struUartBuffer.u32RecvLen - u32MsgLen;            
         }
         else
         {
@@ -302,7 +317,7 @@ u32 ZC_AssemblePkt(u8 *pu8Data, u32 u32DataLen)
                     u32MsgLen - g_struUartBuffer.u32RecvLen);
                 g_struUartBuffer.u32Status = MSG_BUFFER_FULL;
                 g_struUartBuffer.u32RecvLen = u32MsgLen;
-
+                *pu32LeftLen = u32DataLen + g_struUartBuffer.u32RecvLen - u32MsgLen;            
             }
             else
             {
@@ -334,8 +349,14 @@ void ZC_Moudlefunc(u8 *pu8Data, u32 u32DataLen)
 {
     u32 u32RetVal;
     u32 u32MagicLen = ZC_MAGIC_LEN;
+    u32 u32LeftLen = 0;
 
-    u32RetVal = ZC_AssemblePkt(pu8Data, u32DataLen);
+    if (0 == u32DataLen)
+    {
+        return;
+    }
+
+    u32RetVal = ZC_AssemblePkt(pu8Data, u32DataLen, &u32LeftLen);
 
     if (ZC_RET_ERROR == u32RetVal)
     {
@@ -348,6 +369,12 @@ void ZC_Moudlefunc(u8 *pu8Data, u32 u32DataLen)
             g_struUartBuffer.u32RecvLen - u32MagicLen);
         g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
         g_struUartBuffer.u32RecvLen = 0;
+    }
+
+    /*deal left data*/
+    if (u32LeftLen > 0)
+    {
+        ZC_Moudlefunc(pu8Data + (u32DataLen - u32LeftLen), u32LeftLen);
     }
 
     return; 

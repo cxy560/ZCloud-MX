@@ -30,6 +30,11 @@ void ZC_ClientDisconnect(u32 u32ClientId)
         if (u32ClientId == g_struClientInfo.u32ClientFd[u32Index])
         {
             g_struClientInfo.u32ClientVaildFlag[u32Index] = ZC_CLIENT_VAILD_FLAG;
+            if ((ZC_CLIENT_STATUS_BUSY == g_struClientInfo.u8ClientStates)
+            && (u32ClientId == g_struClientInfo.u32ClientBusyId))
+            {
+                ZC_SetClientFree(u32ClientId);
+            }
         }
     }
 }
@@ -195,18 +200,35 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
     ZC_MessageHead *pstruMsg;
     ZC_MessageOptHead struOpt;
     ZC_AppDirectMsg struAppDirectMsg;
+    ZC_SecHead *pstruHead;
     u16 u16Len;
-    
+    u32 u32CiperLen;
+    u8 *pu8Key;
     ZC_SendParam struParam;
 
-    /*can hanle it*/
+    /*can hanle it,get aes key*/
+    
+    g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
+
     u32RetVal = ZC_CheckClientIdle(ClientId);
     if (ZC_RET_ERROR == u32RetVal)
     {
-        EVENT_BuildMsg(ZC_CODE_ERR, 0, g_u8MsgBuildBuffer, &u16Len, 
+        pstruHead = (ZC_SecHead*)(g_u8MsgBuildBuffer);
+        
+        EVENT_BuildMsg(ZC_CODE_ERR, 0, g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u16Len, 
             NULL, 0);
+        
+        AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16Len,
+            pu8Key, 16,
+            pu8Key, 16,
+            g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u32CiperLen);
+
+        pstruHead->u8SecType = ZC_SEC_ALG_AES;
+        pstruHead->u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
+
         struParam.u8NeedPoll = 0;            
-        g_struProtocolController.pstruMoudleFun->pfunSendToNet(ClientId, g_u8MsgBuildBuffer, u16Len, &struParam);
+        g_struProtocolController.pstruMoudleFun->pfunSendToNet(ClientId, g_u8MsgBuildBuffer, 
+            u32CiperLen + sizeof(ZC_SecHead), &struParam);
         return;            
     }
     
@@ -216,8 +238,18 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
     u32RetVal = MSG_RecvDataFromClient(pu8Data, u32DataLen);
     if (MSG_BUFFER_FULL == g_struClientBuffer.u8Status)
     {
+        
         if (ZC_RET_OK == u32RetVal)
         {
+            pstruHead = (ZC_SecHead *)g_u8ClientCiperBuffer;
+            
+            AES_CBC_Decrypt(g_u8ClientCiperBuffer + sizeof(ZC_SecHead), ZC_HTONS(pstruHead->u16TotalMsg), 
+                pu8Key, ZC_HS_SESSION_KEY_LEN, 
+                pu8Key, 16, 
+                g_struClientBuffer.u8MsgBuffer, &u32CiperLen);
+
+            memcpy(g_u8ClientCiperBuffer + sizeof(ZC_SecHead), g_struClientBuffer.u8MsgBuffer, u32CiperLen);
+
             pstruMsg = (ZC_MessageHead*)(g_u8ClientCiperBuffer + sizeof(ZC_SecHead));
             pstruMsg->Payloadlen = ZC_HTONS(ZC_HTONS(pstruMsg->Payloadlen) + sizeof(ZC_MessageOptHead) + sizeof(struAppDirectMsg));
             pstruMsg->OptNum = pstruMsg->OptNum + 1;
