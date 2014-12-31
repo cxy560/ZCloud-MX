@@ -165,6 +165,12 @@ void EXTI0_IRQHandler(void)
 	gpio_irq(); //SDIO OOB interrupt
 }
 
+void EXTI3_IRQHandler(void)
+{
+	gpio_irq(); //User defined external interrupt, EMW3162 button 1: PA3
+}
+
+
 
 /**
   * @brief  This function handles PPP interrupt request.

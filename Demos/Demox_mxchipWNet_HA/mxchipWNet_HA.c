@@ -86,6 +86,13 @@ u16 g_u16LocalPort;
     'z', 'z', 'z', 'z'\
 }
 
+#define DEFAULT_TOKEN {\
+    0, 1, 2, 3,\
+    4, 5, 6, 7,\
+    0, 1, 2, 3,\
+    4, 5, 6, 7\
+}
+
 
 typedef struct 
 {
@@ -105,7 +112,9 @@ MX_StaInfo g_struMXStaInfo = {
     DEFAULT_IOT_CLOUD_KEY,
     DEFAULT_IOT_PRIVATE_KEY,
     DEFAULT_DEVICIID,
-    "www.baidu.com"
+    "www.baidu.com",
+    {0,0,0,0},
+    DEFAULT_TOKEN
 };
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
 u32 u32CloudIp;
@@ -114,6 +123,31 @@ u8 g_u8ClientCiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
 u8 g_u8ClientSendLen = 0;
 MSG_Buffer g_struClientBuffer;
 u32 g_u32GloablIp;
+
+void MX_Rest(void);
+
+void Button_irq_handler(void *arg)
+{
+    ZC_Printf("easy link\n");
+    MX_Rest();
+}
+
+
+void Button_Init(void)
+{
+    GPIO_InitTypeDef   GPIO_InitStructure;
+
+    Button1_CLK_INIT(Button1_CLK, ENABLE);
+
+    GPIO_InitStructure.GPIO_Pin = Button1_PIN;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;			
+    GPIO_Init(Button1_PORT, &GPIO_InitStructure);
+
+    gpio_irq_enable(Button1_PORT, Button1_IRQ_PIN, IRQ_TRIGGER_FALLING_EDGE, Button_irq_handler, 0);
+}	
+
 
 /*************************************************
 * Function: is_wifi_disalbed
@@ -200,7 +234,7 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
     
     ZC_Printf("0x%x.0x%x.0x%x.0x%x\n", u8Ip[0],u8Ip[1],u8Ip[2],u8Ip[3]);
 #endif    
-    addr.s_ip = inet_addr("42.62.41.75"); 
+    addr.s_ip = inet_addr("192.168.1.111"); 
     addr.s_port = ZC_CLOUD_PORT;
     fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     setsockopt(fd,0,SO_BLOCKMODE,&opt,4);
@@ -258,7 +292,7 @@ u32 MX_FirmwareUpdateFinish(u32 u32TotalLen)
     device_info->conf.bootTable.start_address = UPDATE_START_ADDRESS;
     device_info->conf.bootTable.type = 'A';
     device_info->conf.bootTable.upgrade_type = 'U';
-    updateConfiguration(device_info);
+    MX_WriteDataToFlash(device_info);
 
     FLASH_Lock();
     return ZC_RET_OK;
@@ -413,7 +447,7 @@ u32 MX_GetStoreInfor(u8 u8Type, u8 **pu8Data)
             *pu8Data = g_struMXStaInfo.u8EqVersion;        
             break;
         case ZC_GET_TYPE_TOKENKEY:
-            *pu8Data = g_struMXStaInfo.u8TokenKey;        
+            *pu8Data = g_struMXStaInfo.u8TokenKey;
             break;
     }
     return ZC_RET_OK;
@@ -694,6 +728,29 @@ void formatMACAddr(void *destAddr, void *srcAddr)
     				toupper(*((char *)(srcAddr)+10)),toupper(*((char *)(srcAddr)+11)));
 }
 /*************************************************
+* Function: MX_Rand
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void MX_Rand(u8 *pu8Rand)
+{
+    u32 u32Rand;
+    u32 u32Index; 
+    for (u32Index = 0; u32Index < 10; u32Index++)
+    {
+        u32Rand = rand();
+        pu8Rand[u32Index * 4] = ((u8)u32Rand % 26) + 65;
+        pu8Rand[u32Index * 4 + 1] = ((u8)(u32Rand >> 8) % 26) + 65;
+        pu8Rand[u32Index * 4 + 2] = ((u8)(u32Rand >> 16) % 26) + 65;
+        pu8Rand[u32Index * 4 + 3] = ((u8)(u32Rand >> 24) % 26) + 65;        
+    }
+}
+
+
+/*************************************************
 * Function: socket_connected
 * Description: 
 * Author: cxy 
@@ -706,6 +763,7 @@ void socket_connected(int fd)
     ZC_Printf("socket connected\n");
     if(fd==g_struProtocolController.struCloudConnection.u32Socket)
     {
+        MX_Rand(g_struProtocolController.RandMsg);
         PCT_SendCloudAccessMsg1(&g_struProtocolController);
     }
 }
@@ -731,7 +789,7 @@ void RptConfigmodeRslt(network_InitTypeDef_st *nwkpara)
         memcpy(device_info->conf.sta_key, nwkpara->wifi_key, sizeof(device_info->conf.sta_key));
         /*Clear fastlink record*/
         memset(&(device_info->conf.fastLinkConf), 0x0, sizeof(fast_link_st));
-        updateConfiguration(device_info);
+        MX_WriteDataToFlash(device_info);
         system_reload();
     }
 }
@@ -756,7 +814,7 @@ void connected_ap_info(apinfo_adv_t *ap_info, char *key, int key_len)  //callbac
     memcpy(&(device_info->conf.fastLinkConf.ap_info), ap_info, sizeof(ApList_adv_t));
     memcpy(device_info->conf.fastLinkConf.key, key, key_len);
     device_info->conf.fastLinkConf.key_len = key_len;
-    updateConfiguration(device_info);
+    MX_WriteDataToFlash(device_info);
   }
 }
 /*************************************************
@@ -776,7 +834,6 @@ void WifiStatusHandler(int event)
         case MXCHIP_WIFI_DOWN:
             MX_Sleep();
         case MXCHIP_WIFI_JOIN_FAILED:
-            ZC_Printf("join fail\n");
             break;
         default:
           break;
@@ -795,7 +852,7 @@ void dns_ip_set(u8 *hostname, u32 ip)
 {
 	if((int)ip == -1)
 	{
-	    ZC_Printf("DNS ERROR");
+	    ZC_Printf("DNS ERROR\n");
 	}
 	else
 	{
@@ -870,6 +927,7 @@ void mxchipWNet_HA_init(void)
 
     SystemCoreClockUpdate();
     mxchipInit();
+    Button_Init();
     hal_uart_init();
     getNetPara(&para, Station);
     formatMACAddr((void *)device_info->status.mac, &para.mac);
@@ -879,8 +937,6 @@ void mxchipWNet_HA_init(void)
     strcpy((char *)device_info->status.dns, (char *)&para.dns);
 
     readConfiguration(device_info);
-
-    //MX_WriteDataToFlash(device_info);
     MX_ReadDataFormFlash();
 
     wNetConfig.wifi_mode = Station;
