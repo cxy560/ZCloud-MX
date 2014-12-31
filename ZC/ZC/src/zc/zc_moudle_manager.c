@@ -41,6 +41,13 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
         pstruOpt = (ZC_MessageOptHead *)((u8*)pstruMsg + u32Offset);
         if (ZC_OPT_APPDIRECT == ZC_HTONS(pstruOpt->OptCode))
         {
+            pstruAppDirect = (ZC_AppDirectMsg *)(pstruOpt+1);
+
+            if (ZC_CLIENT_VAILD_FLAG == g_struClientInfo.u32ClientVaildFlag[u32Index])
+            {
+                return ZC_RET_OK;
+            }
+            
             pstruMsg->OptNum = pstruMsg->OptNum - 1;
 
             u16RealLen = ZC_HTONS(pstruMsg->Payloadlen)
@@ -54,10 +61,7 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
             memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead) + u32Offset, 
                 (u8*)pstruMsg + u32Offset + sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen),
                 (u16RealLen + sizeof(ZC_MessageHead)) - u32Offset);
-
-            pstruAppDirect = (ZC_AppDirectMsg *)(pstruOpt+1);
-
-            
+           
             g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
 
             AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16RealLen + sizeof(ZC_MessageHead),
@@ -170,7 +174,14 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
             g_struProtocolController.pstruMoudleFun->pfunRest();
             break;
         default:
-            PCT_HandleMoudleEvent(pu8Data, u16DataLen);
+            if(PCT_STATE_CONNECT_CLOUD == g_struProtocolController.u8MainState)
+            {
+                PCT_HandleMoudleEvent(pu8Data, u16DataLen);
+            }
+            else
+            {
+                PCT_SendNotifyMsg(ZC_CODE_CLOUD_DISCONNECT); 
+            }
             break;
     }
     
