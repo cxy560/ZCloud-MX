@@ -113,7 +113,7 @@ typedef enum
 typedef enum 
 {
     ZC_OPT_TRANSPORT = 0,
-    ZC_OPT_APPDIRECT = 1,
+    ZC_OPT_SSESSION = 1,
 }ZC_OptCode;
 
 /*******************************Message definition***********************************/
@@ -252,8 +252,8 @@ typedef struct
 
 /*ZC_OPT_APPDIRECT*/
 typedef struct{
-    u32 u32AppClientId;
-}ZC_AppDirectMsg;
+    u32 u32SsessionId;
+}ZC_SsessionInfo;
 
 
 #endif

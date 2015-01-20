@@ -30,7 +30,6 @@ MSG_Buffer g_struSendBuffer[MSG_BUFFER_SEND_MAX_NUM];
 MSG_Queue  g_struSendQueue;
 
 u8 g_u8MsgBuildBuffer[MSG_BULID_BUFFER_MAXLEN];
-u8 g_u8CiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
 
 
 u16 g_u16TcpMss;
@@ -112,14 +111,13 @@ MX_StaInfo g_struMXStaInfo = {
     DEFAULT_IOT_CLOUD_KEY,
     DEFAULT_IOT_PRIVATE_KEY,
     DEFAULT_DEVICIID,
-    "www.baidu.com",
+    "www.ablecloud.cn",
     {0,0,0,0},
     DEFAULT_TOKEN
 };
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
-u32 u32CloudIp;
+u32 u32CloudIp = 0;
 int g_Bcfd;
-u8 g_u8ClientCiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
 u8 g_u8ClientSendLen = 0;
 MSG_Buffer g_struClientBuffer;
 u32 g_u32GloablIp;
@@ -224,17 +222,13 @@ u32 MX_ConnectToCloud(PTC_Connection *pstruConnection)
     struct sockaddr_t addr;
 
     memset((char*)&addr,0,sizeof(addr));
-#if 0    
-    retval = gethostbyname((char*)g_struMXStaInfo.u8CloudAddr, u8Ip, 4);
-    if(-1 == retval)
+
+    if (0 == u32CloudIp)
     {
         return ZC_RET_ERROR;
     }
-
     
-    ZC_Printf("0x%x.0x%x.0x%x.0x%x\n", u8Ip[0],u8Ip[1],u8Ip[2],u8Ip[3]);
-#endif    
-    addr.s_ip = inet_addr("192.168.1.111"); 
+    addr.s_ip = u32CloudIp; 
     addr.s_port = ZC_CLOUD_PORT;
     fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     setsockopt(fd,0,SO_BLOCKMODE,&opt,4);
@@ -527,14 +521,17 @@ void MX_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
 {
     u32 u32RetVal;
     u16 u16PlainLen;
-    u32RetVal = MSG_RecvDataFromCloud(pu8Data, u32DataLen);
+    u32RetVal = MSG_RecvData(&g_struRecvBuffer, pu8Data, u32DataLen);
 
     if (ZC_RET_OK == u32RetVal)
     {
         if (MSG_BUFFER_FULL == g_struRecvBuffer.u8Status)
         {
-            u32RetVal = SEC_Decrypt((ZC_SecHead*)g_u8CiperBuffer, 
-                g_u8CiperBuffer + sizeof(ZC_SecHead), g_struRecvBuffer.u8MsgBuffer, &u16PlainLen);
+            u32RetVal = SEC_Decrypt((ZC_SecHead*)g_struRecvBuffer.u8MsgBuffer, 
+                g_struRecvBuffer.u8MsgBuffer + sizeof(ZC_SecHead), g_u8MsgBuildBuffer, &u16PlainLen);
+
+            /*copy data*/
+            memcpy(g_struRecvBuffer.u8MsgBuffer, g_u8MsgBuildBuffer, u16PlainLen);
 
             g_struRecvBuffer.u32Len = u16PlainLen;
             if (ZC_RET_OK == u32RetVal)
@@ -545,6 +542,7 @@ void MX_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
     }
     
     return;
+
 }
 /*************************************************
 * Function: MX_ListenClient
@@ -937,6 +935,7 @@ void mxchipWNet_HA_init(void)
     strcpy((char *)device_info->status.dns, (char *)&para.dns);
 
     readConfiguration(device_info);
+    MX_WriteDataToFlash(device_info);
     MX_ReadDataFormFlash();
 
     wNetConfig.wifi_mode = Station;

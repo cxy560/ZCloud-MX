@@ -588,12 +588,12 @@ void PCT_HandleOtaBeginMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuf
 * Parameter: 
 * History:
 *************************************************/
-void PCT_ModuleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg)
+void PCT_ModuleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, u8 *pu8Msg)
 {
     ZC_OtaFileBeginReq *pstruOta;
     ZC_Printf("Ota File Begin\n");
     
-    pstruOta = (ZC_OtaFileBeginReq *)(pstruMsg + 1);
+    pstruOta = (ZC_OtaFileBeginReq *)(pu8Msg);
     
     pstruContoller->struOtaInfo.u32RecvOffset = 0;
     pstruContoller->struOtaInfo.u32TotalLen = ZC_HTONL(pstruOta->u32FileTotalLen);
@@ -610,7 +610,7 @@ void PCT_ModuleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *
 * Parameter: 
 * History:
 *************************************************/
-void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg)
+void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg, u8 *pu8Msg)
 {
     ZC_OtaFileChunkReq *pstruOta;
     u32 u32FileLen;
@@ -621,7 +621,7 @@ void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *
 
     ZC_Printf("Ota File Chunk\n");
     
-    pstruOta = (ZC_OtaFileChunkReq *)(pstruMsg + 1);
+    pstruOta = (ZC_OtaFileChunkReq *)(pu8Msg);
     u32FileLen = ZC_HTONS(pstruMsg->Payloadlen) - sizeof(ZC_OtaFileChunkReq);
     u32RecvOffset = ZC_HTONL(pstruOta->u32Offset);
     
@@ -670,7 +670,7 @@ void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *
 * Parameter: 
 * History:
 *************************************************/
-void PCT_ModuleOtaFileEndMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg)
+void PCT_ModuleOtaFileEndMsg(PTC_ProtocolCon *pstruContoller, u8 *pu8Msg)
 {
     u32 u32RetVal;
     ZC_Printf("Ota File End\n");
@@ -877,6 +877,11 @@ void PCT_SetTokenKey(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuffer)
     pstruSetKey = (ZC_TokenSetReq *)(pstruMsg + 1);
 
     pstruContoller->pstruMoudleFun->pfunStoreInfo(1, pstruSetKey->TokenKey, ZC_HS_SESSION_KEY_LEN);
+
+    
+    PCT_SendEmptyMsg(pstruMsg->MsgId, ZC_SEC_ALG_AES);
+    PCT_SendAckToCloud(pstruMsg->MsgId);
+    
     return;
 }
 /*************************************************
@@ -1051,7 +1056,6 @@ void PCT_Sleep()
 u32 PCT_SendMsgToCloud(ZC_SecHead *pstruSecHead, u8 *pu8PlainData)
 {
     u32 u32Index;
-    u16 u16RemainLen;
     u32 u32RetVal;
     u16 u16Len;
     u16 u16PaddingLen;
@@ -1065,68 +1069,38 @@ u32 PCT_SendMsgToCloud(ZC_SecHead *pstruSecHead, u8 *pu8PlainData)
 
     u16Len = ZC_HTONS(pstruSecHead->u16TotalMsg) + sizeof(ZC_SecHead) + u16PaddingLen;    
     
-    if (u16Len > MSG_CIPER_BUFFER_MAXLEN)
+    if (u16Len > MSG_BUFFER_MAXLEN)
     {
         return ZC_RET_ERROR;
     }
 
-    /*Check send buffer is enough*/
-    u16RemainLen = 0;
     for (u32Index = 0; u32Index < MSG_BUFFER_SEND_MAX_NUM; u32Index++)
     {
         if (MSG_BUFFER_IDLE == g_struSendBuffer[u32Index].u8Status)
         {
-            u16RemainLen += g_u16TcpMss; 
-        }
-    }
-    
-    /*if buffer is enough, return*/
-    if (u16Len > u16RemainLen)
-    {
-        return ZC_RET_ERROR;
-    }
+            u16Len = ZC_HTONS(pstruSecHead->u16TotalMsg) + u16PaddingLen;
 
-    u16Len = ZC_HTONS(pstruSecHead->u16TotalMsg) + u16PaddingLen;
-
-    /*first check padding,then Encrypt, final copy sechead*/
-    u32RetVal = SEC_Encrypt(pstruSecHead, g_u8CiperBuffer + sizeof(ZC_SecHead), pu8PlainData, &u16Len);
-    
-    if (ZC_RET_ERROR == u32RetVal)
-    {
-        return ZC_RET_ERROR;
-    }
-    pstruSecHead->u16TotalMsg = ZC_HTONS(u16Len);
-    /*copy sechead*/
-    memcpy(g_u8CiperBuffer, (u8*)pstruSecHead, sizeof(ZC_SecHead));
-    
-    /*copy to buffer*/
-    u16Len = u16Len + sizeof(ZC_SecHead);
-    u16RemainLen = u16Len;
-    
-    for (u32Index = 0; u32Index < MSG_BUFFER_SEND_MAX_NUM; u32Index++)
-    {
-        if (MSG_BUFFER_IDLE == g_struSendBuffer[u32Index].u8Status)
-        {
-            if (u16RemainLen > g_u16TcpMss)
+            /*first check padding,then Encrypt, final copy sechead*/
+            u32RetVal = SEC_Encrypt(pstruSecHead, g_struSendBuffer[u32Index].u8MsgBuffer + sizeof(ZC_SecHead), pu8PlainData, &u16Len);
+            
+            if (ZC_RET_ERROR == u32RetVal)
             {
-                memcpy(g_struSendBuffer[u32Index].u8MsgBuffer, g_u8CiperBuffer + (u16Len - u16RemainLen), g_u16TcpMss);
-                g_struSendBuffer[u32Index].u32Len = g_u16TcpMss;
-                g_struSendBuffer[u32Index].u8Status = MSG_BUFFER_FULL;
-                MSG_PushMsg(&g_struSendQueue, (u8*)&g_struSendBuffer[u32Index]);
-                u16RemainLen -= g_u16TcpMss;
-            }
-            else
-            {
-                memcpy(g_struSendBuffer[u32Index].u8MsgBuffer, g_u8CiperBuffer + (u16Len - u16RemainLen), u16RemainLen);
-                g_struSendBuffer[u32Index].u32Len = u16RemainLen;
-                g_struSendBuffer[u32Index].u8Status = MSG_BUFFER_FULL;
-                MSG_PushMsg(&g_struSendQueue, (u8*)&g_struSendBuffer[u32Index]);
-                break;
+                return ZC_RET_ERROR;
             }
             
+            pstruSecHead->u16TotalMsg = ZC_HTONS(u16Len);
+            /*copy sechead*/
+            memcpy(g_struSendBuffer[u32Index].u8MsgBuffer, (u8*)pstruSecHead, sizeof(ZC_SecHead));
+        
+            g_struSendBuffer[u32Index].u32Len = u16Len + sizeof(ZC_SecHead);
+            g_struSendBuffer[u32Index].u8Status = MSG_BUFFER_FULL;
+            MSG_PushMsg(&g_struSendQueue, (u8*)&g_struSendBuffer[u32Index]);
+
+            return ZC_RET_OK;
         }
     }
-    return ZC_RET_OK;
+
+    return ZC_RET_ERROR;
 }
 
 /******************************* FILE END ***********************************/

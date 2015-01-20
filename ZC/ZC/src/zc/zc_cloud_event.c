@@ -125,4 +125,94 @@ u32  EVENT_BuildBcMsg(u8 *pu8Msg, u16 *pu16Len)
 
 }
 
+/*************************************************
+* Function: EVENT_ParseOption
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void EVENT_ParseOption(ZC_MessageHead *pstruMsg, ZC_OptList *pstruOptList, u16 *pu16OptLen)
+{
+    u8 u8OptNum;
+    ZC_MessageOptHead *pstruOptHead;
+    u16 u16Offset;
+
+    u16Offset = sizeof(ZC_MessageHead);
+    pstruOptHead = (ZC_MessageOptHead *)((u8*)pstruMsg + u16Offset);
+    *pu16OptLen = 0;
+
+    for (u8OptNum = 0; u8OptNum < pstruMsg->OptNum; u8OptNum++)
+    {
+        switch (ZC_HTONS(pstruOptHead->OptCode))
+        {
+            case ZC_OPT_TRANSPORT:
+                pstruOptList->pstruTransportInfo = (ZC_TransportInfo *)(pstruOptHead + 1);
+                break;
+            case ZC_OPT_SSESSION:
+                pstruOptList->pstruSsession = (ZC_SsessionInfo *)(pstruOptHead + 1);            
+                break;
+        }
+        *pu16OptLen += sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOptHead->OptLen);
+        pstruOptHead = (ZC_MessageOptHead *)((u8*)pstruOptHead + sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOptHead->OptLen));
+    }
+}
+
+/*************************************************
+* Function: EVENT_BuildOption
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void EVENT_BuildOption(ZC_OptList *pstruOptList, u8 *pu8OptNum, u8 *pu8Buffer, u16 *pu16Len)
+{
+    ZC_MessageOptHead *pstruOpt;
+    u8 u8OptNum = 0;
+    u8 u16OptLen = 0;
+    
+    *pu16Len = u16OptLen;
+    *pu8OptNum = u8OptNum;
+    
+    
+    if (NULL == pstruOptList)
+    {
+        return;
+    }
+    
+    pstruOpt = (ZC_MessageOptHead *)pu8Buffer;
+
+    /*add opt, if it exist*/
+    if (NULL != pstruOptList->pstruTransportInfo)
+    {
+        pstruOpt->OptCode = ZC_HTONS(ZC_OPT_TRANSPORT);
+        pstruOpt->OptLen = ZC_HTONS(sizeof(ZC_TransportInfo));
+        memcpy((u8*)(pstruOpt + 1), (u8*)pstruOptList->pstruTransportInfo, sizeof(ZC_TransportInfo));
+
+        u8OptNum++;
+        u16OptLen += sizeof(ZC_MessageOptHead) + sizeof(ZC_TransportInfo);
+        pstruOpt = (ZC_MessageOptHead *)(pu8Buffer + u16OptLen);        
+    }
+    
+
+    if (NULL != pstruOptList->pstruSsession)
+    {
+        pstruOpt = (ZC_MessageOptHead *)pu8Buffer;
+        pstruOpt->OptCode = ZC_HTONS(ZC_OPT_SSESSION);
+        pstruOpt->OptLen = ZC_HTONS(sizeof(ZC_SsessionInfo));
+        memcpy((u8*)(pstruOpt + 1), (u8*)pstruOptList->pstruSsession, sizeof(ZC_SsessionInfo));
+
+        u8OptNum++;
+        u16OptLen += sizeof(ZC_MessageOptHead) + sizeof(ZC_SsessionInfo);
+        pstruOpt = (ZC_MessageOptHead *)(pu8Buffer + u16OptLen);        
+    }    
+
+    
+    *pu16Len = u16OptLen;
+    *pu8OptNum = u8OptNum;
+    return;
+}
+
 /******************************* FILE END ***********************************/

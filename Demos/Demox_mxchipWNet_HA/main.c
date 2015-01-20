@@ -6,6 +6,7 @@
 #include "mxchipWNet_HA.h"
 #include "user_misc.h"
 #include <zc_protocol_interface.h>
+#include <zc_protocol_controller.h>
 #include <zc_module_interface.h>
 
 

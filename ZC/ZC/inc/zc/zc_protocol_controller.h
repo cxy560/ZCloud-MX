@@ -164,8 +164,6 @@ extern MSG_Queue  g_struSendQueue;
 extern MSG_Buffer g_struRetxBuffer;
 
 extern u8 g_u8MsgBuildBuffer[MSG_BULID_BUFFER_MAXLEN];
-extern u8 g_u8CiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
-extern u8 g_u8ClientCiperBuffer[MSG_CIPER_BUFFER_MAXLEN];
 
 extern u16 g_u16TcpMss;
 extern u32 g_u32LoopFlag;
@@ -196,9 +194,9 @@ void PCT_WakeUp(void);
 void PCT_Sleep(void);
 u32  PCT_SendMsgToCloud(ZC_SecHead *pstruSecHead, u8 *pu8PlainData);
 void PCT_SendAckToCloud(u8 u8MsgId);
-void PCT_ModuleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg);
-void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg);
-void PCT_ModuleOtaFileEndMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg);
+void PCT_ModuleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, u8 *pu8Msg);
+void PCT_ModuleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, ZC_MessageHead *pstruMsg, u8 *pu8Msg);
+void PCT_ModuleOtaFileEndMsg(PTC_ProtocolCon *pstruContoller, u8 *pu8Msg);
 void PCT_HandleOtaBeginMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuffer);
 void PCT_HandleOtaFileBeginMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuffer);
 void PCT_HandleOtaFileChunkMsg(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuffer);

@@ -12,85 +12,100 @@
 #include <zc_protocol_controller.h>
 #include <zc_module_interface.h>
 extern u8 g_u8ClientSendLen;
-#ifndef MT7681
+#ifndef NO_NEED_ASSEMBLE
 extern ZC_UartBuffer g_struUartBuffer;
 #endif
 /*************************************************
-* Function: ZC_DealAppOpt
+* Function: ZC_DealSessionOpt
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
+u32 ZC_DealSessionOpt(ZC_MessageHead *pstruMsg, ZC_OptList *pstruOptList, u8 *pu8PayLoad)
 {
     u32 u32Index;
-    u32 u32Offset = 0;
+    u32 u32ClientId;
     u16 u16RealLen;
     u32 u32CiperLen;
-    ZC_MessageOptHead *pstruOpt;
     ZC_SecHead struSecHead;
-    ZC_AppDirectMsg *pstruAppDirect;
+    ZC_SsessionInfo *pstruSsession;
+    ZC_OptList struOptList;
     ZC_SendParam struParam;
     u8 *pu8Key;
+    u8 u8FindFlag = 0;
+    u16 u16OptLen = 0;
+    u16 crc = 0;
 
-    u32Offset = sizeof(ZC_MessageHead);
-    for (u32Index = 0; u32Index < pstruMsg->OptNum; u32Index++)
+    pstruSsession = pstruOptList->pstruSsession;
+    u32ClientId = ZC_HTONL(pstruSsession->u32SsessionId);
+    struOptList.pstruSsession = NULL;
+    struOptList.pstruTransportInfo = pstruOptList->pstruTransportInfo;
+
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
     {
-        pstruOpt = (ZC_MessageOptHead *)((u8*)pstruMsg + u32Offset);
-        if (ZC_OPT_APPDIRECT == ZC_HTONS(pstruOpt->OptCode))
+        if (ZC_CLIENT_INVAILD_FLAG == g_struClientInfo.u32ClientVaildFlag[u32Index])
         {
-            pstruAppDirect = (ZC_AppDirectMsg *)(pstruOpt+1);
-
-            if (ZC_CLIENT_VAILD_FLAG == g_struClientInfo.u32ClientVaildFlag[u32Index])
+            if (u32ClientId == g_struClientInfo.u32ClientFd[u32Index])
             {
-                return ZC_RET_OK;
+                u8FindFlag = 1;
+                break;
             }
-            
-            pstruMsg->OptNum = pstruMsg->OptNum - 1;
-
-            u16RealLen = ZC_HTONS(pstruMsg->Payloadlen)
-                            - (sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen));
-            
-            pstruMsg->Payloadlen = ZC_HTONS(u16RealLen);
-
-            /*copy msg*/
-            memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), (u8*)pstruMsg, u32Offset);
-
-            memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead) + u32Offset, 
-                (u8*)pstruMsg + u32Offset + sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen),
-                (u16RealLen + sizeof(ZC_MessageHead)) - u32Offset);
-           
-            g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
-
-            AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16RealLen + sizeof(ZC_MessageHead),
-                pu8Key, 16,
-                pu8Key, 16,
-                g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u32CiperLen);
-
-            /*copy sec head*/
-            struSecHead.u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
-            struSecHead.u8SecType = ZC_SEC_ALG_AES;
-            
-            memcpy(g_u8MsgBuildBuffer, &struSecHead, sizeof(ZC_SecHead));
-
-
-            /*msg len include sec head, msg head, payload len*/
-            g_u8ClientSendLen = u32CiperLen + sizeof(ZC_SecHead);
-
-            struParam.u8NeedPoll = 1;
-
-            g_struProtocolController.pstruMoudleFun->pfunSendToNet(ZC_HTONL(pstruAppDirect->u32AppClientId), g_u8MsgBuildBuffer, g_u8ClientSendLen, &struParam);
-
-            g_u8ClientSendLen = 0;
-            return ZC_RET_OK;
         }
-        u32Offset += sizeof(ZC_MessageOptHead) + ZC_HTONS(pstruOpt->OptLen);
+    }
+
+    if (0 == u8FindFlag)
+    {
+        return ZC_RET_OK;
     }
     
-    return ZC_RET_ERROR;
+    EVENT_BuildOption(&struOptList, &pstruMsg->OptNum, 
+        g_u8MsgBuildBuffer + sizeof(ZC_SecHead) + sizeof(ZC_MessageHead), &u16OptLen);
+    
+    u16RealLen = ZC_HTONS(pstruMsg->Payloadlen)
+                    - (sizeof(ZC_MessageOptHead) + sizeof(ZC_SsessionInfo));
+    
+    pstruMsg->Payloadlen = ZC_HTONS(u16RealLen);
 
+
+    /*copy msg*/
+    memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead) + u16OptLen + sizeof(ZC_MessageHead), 
+        pu8PayLoad,
+        (u16RealLen - u16OptLen));
+
+    crc = crc16_ccitt(g_u8MsgBuildBuffer + sizeof(ZC_MessageHead),u16RealLen);
+    pstruMsg->TotalMsgCrc[0]=(crc&0xff00)>>8;
+    pstruMsg->TotalMsgCrc[1]=(crc&0xff);
+
+    /*copy msg head*/
+    memcpy(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), (u8*)pstruMsg, sizeof(ZC_MessageHead));
+
+    
+    g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
+
+    u32CiperLen = MSG_BULID_BUFFER_MAXLEN;
+    AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16RealLen + sizeof(ZC_MessageHead),
+        pu8Key, 16,
+        pu8Key, 16,
+        g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u32CiperLen);
+    
+    /*copy sec head*/
+    struSecHead.u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
+    struSecHead.u8SecType = ZC_SEC_ALG_AES;
+    
+    memcpy(g_u8MsgBuildBuffer, &struSecHead, sizeof(ZC_SecHead));
+    
+    
+    /*msg len include sec head, msg head, payload len*/
+    g_u8ClientSendLen = u32CiperLen + sizeof(ZC_SecHead);
+    
+    struParam.u8NeedPoll = 1;
+    
+    g_struProtocolController.pstruMoudleFun->pfunSendToNet(u32ClientId, g_u8MsgBuildBuffer, g_u8ClientSendLen, &struParam);
+    
+    g_u8ClientSendLen = 0;
+    return ZC_RET_OK;
 }
 
 
@@ -105,8 +120,11 @@ u32 ZC_DealAppOpt(ZC_MessageHead *pstruMsg)
 *************************************************/
 u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
 {
-    ZC_MessageHead *pstrMsg;
-    u32 u32RetVal;
+    ZC_MessageHead *pstruMsg;
+    ZC_OptList struOptList;
+    u16 u16OptLen= 0;
+    u8 *pu8Payload = NULL;
+    
     ZC_TraceData(pu8Data, u16DataLen);
 
     if (0 == u16DataLen)
@@ -114,16 +132,27 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
         return ZC_RET_ERROR;
     }
     
-    pstrMsg = (ZC_MessageHead *)pu8Data;
-
-    u32RetVal = ZC_DealAppOpt(pstrMsg);
-    if (ZC_RET_OK == u32RetVal)
+    pstruMsg = (ZC_MessageHead *)pu8Data;
+    ZC_TraceData((u8 *)(pstruMsg + 1), u16DataLen);
+    if(ZC_RET_ERROR == PCT_CheckCrc(pstruMsg->TotalMsgCrc, (u8 *)(pstruMsg + 1), ZC_HTONS(pstruMsg->Payloadlen)))
     {
-        return ZC_RET_OK;
+         return ZC_RET_ERROR;
     }
 
+    struOptList.pstruSsession = NULL;
+    struOptList.pstruTransportInfo = NULL;
     
-    switch(pstrMsg->MsgCode)
+    EVENT_ParseOption(pstruMsg, &struOptList, &u16OptLen);
+
+    pu8Payload = (u8*)pstruMsg + u16OptLen + sizeof(ZC_MessageHead);
+
+    if (NULL != struOptList.pstruSsession)
+    {
+       (void)ZC_DealSessionOpt(pstruMsg, &struOptList, pu8Payload);
+       return ZC_RET_OK;
+    }
+    
+    switch(pstruMsg->MsgCode)
     {
         case ZC_CODE_DESCRIBE:
         {
@@ -140,7 +169,7 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
                 return ZC_RET_OK;
             }
             
-            g_struProtocolController.pstruMoudleFun->pfunStoreInfo(0, (u8*)(pstrMsg + 1), sizeof(ZC_RegisterReq));
+            g_struProtocolController.pstruMoudleFun->pfunStoreInfo(0, pu8Payload, sizeof(ZC_RegisterReq));
 
             g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET; 
             
@@ -161,13 +190,13 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
             break;
         }    
         case ZC_CODE_ZOTA_FILE_BEGIN:
-            PCT_ModuleOtaFileBeginMsg(&g_struProtocolController, pstrMsg);
+            PCT_ModuleOtaFileBeginMsg(&g_struProtocolController, pu8Payload);
             break;
         case ZC_CODE_ZOTA_FILE_CHUNK:
-            PCT_ModuleOtaFileChunkMsg(&g_struProtocolController, pstrMsg);
+            PCT_ModuleOtaFileChunkMsg(&g_struProtocolController, pstruMsg, pu8Payload);
             break;
         case ZC_CODE_ZOTA_FILE_END:
-            PCT_ModuleOtaFileEndMsg(&g_struProtocolController, pstrMsg);
+            PCT_ModuleOtaFileEndMsg(&g_struProtocolController, pu8Payload);
             PCT_SendNotifyMsg(ZC_CODE_ZOTA_END);
             break;
         case ZC_CODE_REST:
@@ -188,7 +217,7 @@ u32 ZC_RecvDataFromMoudle(u8 *pu8Data, u16 u16DataLen)
     return ZC_RET_OK;
 }
 
-#ifndef MT7681
+#ifndef NO_NEED_ASSEMBLE
 /*************************************************
 * Function: ZC_AssemblePkt
 * Description: 

@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MT7681
+#define NO_NEED_ASSEMBLE
 
 #if ZC_DEBUG
 #ifdef ZC_OFF_LINETEST

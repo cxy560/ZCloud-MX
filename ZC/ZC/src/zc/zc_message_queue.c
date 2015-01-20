@@ -121,23 +121,23 @@ u8* MSG_PopMsg(MSG_Queue *pstruMsgQueue)
 * Parameter: 
 * History:
 *************************************************/
-u32 MSG_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
+u32 MSG_RecvData(MSG_Buffer *pstruRecvBuffer, u8 *pu8Data, u32 u32DataLen)
 {
     ZC_SecHead *pstruMsg;
     u32 u32MsgLen;
     
-    if (MSG_BUFFER_FULL == g_struRecvBuffer.u8Status)
+    if (MSG_BUFFER_FULL == pstruRecvBuffer->u8Status)
     {
         return ZC_RET_ERROR;
     }
-    if (MSG_BUFFER_IDLE == g_struRecvBuffer.u8Status)
+    if (MSG_BUFFER_IDLE == pstruRecvBuffer->u8Status)
     {
 
         if (u32DataLen < sizeof(ZC_SecHead))
         {
-            memcpy(g_u8CiperBuffer, pu8Data, u32DataLen);
-            g_struRecvBuffer.u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
-            g_struRecvBuffer.u32Len = u32DataLen;
+            memcpy(pstruRecvBuffer->u8MsgBuffer, pu8Data, u32DataLen);
+            pstruRecvBuffer->u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
+            pstruRecvBuffer->u32Len = u32DataLen;
         }
         else
         {
@@ -146,22 +146,22 @@ u32 MSG_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
 
             if (u32MsgLen > MSG_BUFFER_MAXLEN)
             {
-                g_struRecvBuffer.u8Status = MSG_BUFFER_IDLE;
-                g_struRecvBuffer.u32Len = 0;
+                pstruRecvBuffer->u8Status = MSG_BUFFER_IDLE;
+                pstruRecvBuffer->u32Len = 0;
                 return ZC_RET_ERROR;
             }
 
             if (u32MsgLen <= u32DataLen)
             {
-                memcpy(g_u8CiperBuffer, pu8Data, u32MsgLen);
-                g_struRecvBuffer.u8Status = MSG_BUFFER_FULL;
-                g_struRecvBuffer.u32Len = u32MsgLen;
+                memcpy(pstruRecvBuffer->u8MsgBuffer, pu8Data, u32MsgLen);
+                pstruRecvBuffer->u8Status = MSG_BUFFER_FULL;
+                pstruRecvBuffer->u32Len = u32MsgLen;
             }
             else
             {
-                memcpy(g_u8CiperBuffer, pu8Data, u32DataLen);
-                g_struRecvBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
-                g_struRecvBuffer.u32Len = u32DataLen;
+                memcpy(pstruRecvBuffer->u8MsgBuffer, pu8Data, u32DataLen);
+                pstruRecvBuffer->u8Status = MSG_BUFFER_SEGMENT_HEAD;
+                pstruRecvBuffer->u32Len = u32DataLen;
             }
 
         }
@@ -170,74 +170,74 @@ u32 MSG_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
 
     }
 
-    if (MSG_BUFFER_SEGMENT_HEAD == g_struRecvBuffer.u8Status)
+    if (MSG_BUFFER_SEGMENT_HEAD == pstruRecvBuffer->u8Status)
     {
-        pstruMsg = (ZC_SecHead *)(g_u8CiperBuffer);
+        pstruMsg = (ZC_SecHead *)(pstruRecvBuffer->u8MsgBuffer);
         u32MsgLen = ZC_HTONS(pstruMsg->u16TotalMsg) + sizeof(ZC_SecHead);
 
-        if (u32MsgLen <= u32DataLen + g_struRecvBuffer.u32Len)
+        if (u32MsgLen <= u32DataLen + pstruRecvBuffer->u32Len)
         {
-            memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+            memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                 pu8Data, 
-                (u32MsgLen - g_struRecvBuffer.u32Len));
+                (u32MsgLen - pstruRecvBuffer->u32Len));
 
-            g_struRecvBuffer.u8Status = MSG_BUFFER_FULL;
-            g_struRecvBuffer.u32Len = u32MsgLen;
+            pstruRecvBuffer->u8Status = MSG_BUFFER_FULL;
+            pstruRecvBuffer->u32Len = u32MsgLen;
         }
         else
         {
-            memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+            memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                 pu8Data, 
                 u32DataLen);
-            g_struRecvBuffer.u32Len += u32DataLen;
-            g_struRecvBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
+            pstruRecvBuffer->u32Len += u32DataLen;
+            pstruRecvBuffer->u8Status = MSG_BUFFER_SEGMENT_HEAD;
         }
 
         return ZC_RET_OK;
     }
 
-    if (MSG_BUFFER_SEGMENT_NOHEAD == g_struRecvBuffer.u8Status)
+    if (MSG_BUFFER_SEGMENT_NOHEAD == pstruRecvBuffer->u8Status)
     {
-        if ((g_struRecvBuffer.u32Len + u32DataLen) < sizeof(ZC_SecHead))
+        if ((pstruRecvBuffer->u32Len + u32DataLen) < sizeof(ZC_SecHead))
         {
-            memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+            memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                 pu8Data,
                 u32DataLen);
-            g_struRecvBuffer.u32Len += u32DataLen;
-            g_struRecvBuffer.u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
+            pstruRecvBuffer->u32Len += u32DataLen;
+            pstruRecvBuffer->u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
         }
         else
         {
-            memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+            memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                 pu8Data,
-                (sizeof(ZC_SecHead) - g_struRecvBuffer.u32Len));
+                (sizeof(ZC_SecHead) - pstruRecvBuffer->u32Len));
 
-            pstruMsg = (ZC_SecHead *)(g_u8CiperBuffer);
+            pstruMsg = (ZC_SecHead *)(pstruRecvBuffer->u8MsgBuffer);
             u32MsgLen = ZC_HTONS(pstruMsg->u16TotalMsg) + sizeof(ZC_SecHead);
 
             if (u32MsgLen > MSG_BUFFER_MAXLEN)
             {
-                g_struRecvBuffer.u8Status = MSG_BUFFER_IDLE;
-                g_struRecvBuffer.u32Len = 0;                
+                pstruRecvBuffer->u8Status = MSG_BUFFER_IDLE;
+                pstruRecvBuffer->u32Len = 0;                
                 return ZC_RET_ERROR;
             }
 
-            if (u32MsgLen <= u32DataLen + g_struRecvBuffer.u32Len)
+            if (u32MsgLen <= u32DataLen + pstruRecvBuffer->u32Len)
             {
-                memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+                memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                     pu8Data,
-                    u32MsgLen - g_struRecvBuffer.u32Len);
-                g_struRecvBuffer.u8Status = MSG_BUFFER_FULL;
-                g_struRecvBuffer.u32Len = u32MsgLen;
+                    u32MsgLen - pstruRecvBuffer->u32Len);
+                pstruRecvBuffer->u8Status = MSG_BUFFER_FULL;
+                pstruRecvBuffer->u32Len = u32MsgLen;
 
             }
             else
             {
-                memcpy((g_u8CiperBuffer + g_struRecvBuffer.u32Len), 
+                memcpy((pstruRecvBuffer->u8MsgBuffer + pstruRecvBuffer->u32Len), 
                     pu8Data,
                     u32DataLen);
-                g_struRecvBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
-                g_struRecvBuffer.u32Len += u32DataLen;
+                pstruRecvBuffer->u8Status = MSG_BUFFER_SEGMENT_HEAD;
+                pstruRecvBuffer->u32Len += u32DataLen;
             }
 
         }
@@ -246,142 +246,6 @@ u32 MSG_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
 
     }
     
-    return ZC_RET_ERROR;
-    
-
-}
-
-/*************************************************
-* Function: MSG_RecvDataFromClient
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-u32 MSG_RecvDataFromClient(u8 *pu8Data, u32 u32DataLen)
-{
-    ZC_SecHead *pstruMsg;
-    u32 u32MsgLen;
-    if (MSG_BUFFER_FULL == g_struClientBuffer.u8Status)
-    {
-        return ZC_RET_ERROR;
-    }
-    if (MSG_BUFFER_IDLE == g_struClientBuffer.u8Status)
-    {
-
-        if (u32DataLen < sizeof(ZC_SecHead))
-        {
-            memcpy(g_u8ClientCiperBuffer, pu8Data, u32DataLen);
-            g_struClientBuffer.u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
-            g_struClientBuffer.u32Len = u32DataLen;
-        }
-        else
-        {
-            pstruMsg = (ZC_SecHead *)(pu8Data);
-            u32MsgLen =  ZC_HTONS(pstruMsg->u16TotalMsg) + sizeof(ZC_SecHead);
-
-            if (u32MsgLen > MSG_BUFFER_MAXLEN)
-            {
-                g_struClientBuffer.u8Status = MSG_BUFFER_IDLE;
-                g_struClientBuffer.u32Len = 0;
-                return ZC_RET_ERROR;
-            }
-
-            if (u32MsgLen <= u32DataLen)
-            {
-                memcpy(g_u8ClientCiperBuffer, pu8Data, u32MsgLen);
-                g_struClientBuffer.u8Status = MSG_BUFFER_FULL;
-                g_struClientBuffer.u32Len = u32MsgLen;
-            }
-            else
-            {
-                memcpy(g_u8ClientCiperBuffer, pu8Data, u32DataLen);
-                g_struClientBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
-                g_struClientBuffer.u32Len = u32DataLen;
-            }
-
-        }
-
-        return ZC_RET_OK;
-
-    }
-
-    if (MSG_BUFFER_SEGMENT_HEAD == g_struClientBuffer.u8Status)
-    {
-        pstruMsg = (ZC_SecHead *)(g_u8ClientCiperBuffer);
-        u32MsgLen = ZC_HTONS(pstruMsg->u16TotalMsg) + sizeof(ZC_SecHead);
-
-        if (u32MsgLen <= u32DataLen + g_struClientBuffer.u32Len)
-        {
-            memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                pu8Data, 
-                (u32MsgLen - g_struClientBuffer.u32Len));
-
-            g_struClientBuffer.u8Status = MSG_BUFFER_FULL;
-            g_struClientBuffer.u32Len = u32MsgLen;
-        }
-        else
-        {
-            memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                pu8Data, 
-                u32DataLen);
-            g_struClientBuffer.u32Len += u32DataLen;
-            g_struClientBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
-        }
-
-        return ZC_RET_OK;
-    }
-
-    if (MSG_BUFFER_SEGMENT_NOHEAD == g_struClientBuffer.u8Status)
-    {
-        if ((g_struClientBuffer.u32Len + u32DataLen) < sizeof(ZC_SecHead))
-        {
-            memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                pu8Data,
-                u32DataLen);
-            g_struClientBuffer.u32Len += u32DataLen;
-            g_struClientBuffer.u8Status = MSG_BUFFER_SEGMENT_NOHEAD;
-        }
-        else
-        {
-            memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                pu8Data,
-                (sizeof(ZC_SecHead) - g_struClientBuffer.u32Len));
-
-            pstruMsg = (ZC_SecHead *)(g_u8ClientCiperBuffer);
-            u32MsgLen = ZC_HTONS(pstruMsg->u16TotalMsg) + sizeof(ZC_SecHead);
-
-            if (u32MsgLen > MSG_BUFFER_MAXLEN)
-            {
-                g_struClientBuffer.u8Status = MSG_BUFFER_IDLE;
-                g_struClientBuffer.u32Len = 0;                
-                return ZC_RET_ERROR;
-            }
-
-            if (u32MsgLen <= u32DataLen + g_struClientBuffer.u32Len)
-            {
-                memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                    pu8Data,
-                    u32MsgLen - g_struClientBuffer.u32Len);
-                g_struClientBuffer.u8Status = MSG_BUFFER_FULL;
-                g_struClientBuffer.u32Len = u32MsgLen;
-
-            }
-            else
-            {
-                memcpy((g_u8ClientCiperBuffer + g_struClientBuffer.u32Len), 
-                    pu8Data,
-                    u32DataLen);
-                g_struClientBuffer.u8Status = MSG_BUFFER_SEGMENT_HEAD;
-                g_struClientBuffer.u32Len += u32DataLen;
-            }
-
-        }
-
-        return ZC_RET_OK;
-
-    }
     return ZC_RET_ERROR;
     
 

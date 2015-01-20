@@ -22,8 +22,7 @@
 #define  MSG_BUFFER_SEGMENT_HEAD        (3)
 
 #define  MSG_BUFFER_SEND_MAX_NUM        (MSG_QUEUE_MAXLEN)
-#define  MSG_BULID_BUFFER_MAXLEN        (200)
-#define  MSG_CIPER_BUFFER_MAXLEN        (600) 
+#define  MSG_BULID_BUFFER_MAXLEN        (600)
 
 typedef struct struMSG_QueNode{
     struct struMSG_QueNode* pstruNext;
@@ -54,9 +53,8 @@ extern "C" {
 void MSG_InitQueue(MSG_Queue *pstruMsgQue);
 u32 MSG_PushMsg(MSG_Queue *pstruMsgQueue, u8 *pu8Msg);
 u8* MSG_PopMsg(MSG_Queue *pstruMsgQueue);
-u32 MSG_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen);
+u32 MSG_RecvData(MSG_Buffer *pstruRecvBuffer, u8 *pu8Data, u32 u32DataLen);
 void MSG_Init(void);
-u32 MSG_RecvDataFromClient(u8 *pu8Data, u32 u32DataLen);
 
 #ifdef __cplusplus
 }
