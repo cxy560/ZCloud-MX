@@ -35,116 +35,19 @@ u8 g_u8MsgBuildBuffer[MSG_BULID_BUFFER_MAXLEN];
 u16 g_u16TcpMss;
 u16 g_u16LocalPort;
 
-#define DEFAULT_IOT_CLOUD_KEY {\
-    0xb0, 0x7e, 0xab, 0x09, \
-    0x73, 0x4e, 0x78, 0x12, \
-    0x7e, 0x8c, 0x54, 0xcd, \
-    0xbb, 0x93, 0x3c, 0x16, \
-    0x96, 0x23, 0xaf, 0x7a, \
-    0xfc, 0xd2, 0x8b, 0xd1, \
-    0x43, 0xa2, 0xbb, 0xc8, \
-    0x77, 0xa0, 0xca, 0xcd, \
-    0x01, 0x00, 0x01\
-}
-
-#define DEFAULT_IOT_PRIVATE_KEY {\
-    0xb0, 0x7e, 0xab, 0x09, \
-    0x73, 0x4e, 0x78, 0x12, \
-    0x7e, 0x8c, 0x54, 0xcd, \
-    0xbb, 0x93, 0x3c, 0x16, \
-    0x96, 0x23, 0xaf, 0x7a, \
-    0xfc, 0xd2, 0x8b, 0xd1, \
-    0x43, 0xa2, 0xbb, 0xc8, \
-    0x77, 0xa0, 0xca, 0xcd, \
-    0xef, 0x28, 0x66, 0xbd, \
-    0x44, 0xc1, 0x27, 0x58, \
-    0x3f, 0x71, 0xe3, 0x03, \
-    0xcf, 0x11, 0x69, 0xf1, \
-    0xbc, 0xec, 0x8f, 0xcd, \
-    0xb5, 0x88, 0xab, 0x50, \
-    0x5d, 0xb3, 0xf1, 0xd3, \
-    0xbb, 0x9d, 0xf2, 0x9d, \
-    0xcd, 0x04, 0xff, 0x7e, \
-    0x45, 0x90, 0xa8, 0x1f, \
-    0xf8, 0xd3, 0xb2, 0xdf, \
-    0x33, 0x06, 0x24, 0xa1, \
-    0x93, 0x57, 0x4b, 0xaf, \
-    0xfb, 0x6c, 0x63, 0x6f, \
-    0x82, 0x24, 0xdc, 0xed, \
-    0x6c, 0xdd, 0x7a, 0x61, \
-    0x9a, 0xd2, 0x29, 0x32, \
-    0xdc, 0x4a, 0x86, 0x20, \
-    0x6c, 0x98, 0x16, 0xce, \
-    0xfd, 0x31, 0x50, 0xd6\
-}
-
-#define DEFAULT_DEVICIID {\
-    'z', 'z', 'z', 'z',\
-    'z', 'z', 'z', 'z',\
-    'z', 'z', 'z', 'z',\
-    'z', 'z', 'z', 'z'\
-}
-
-#define DEFAULT_TOKEN {\
-    0, 1, 2, 3,\
-    4, 5, 6, 7,\
-    0, 1, 2, 3,\
-    4, 5, 6, 7\
-}
-
-
-typedef struct 
-{
-    u8 u8CloudKey[36];
-    u8 u8PrivateKey[112];
-    u8 u8DeviciId[ZC_HS_DEVICE_ID_LEN + ZC_DOMAIN_LEN];
-    u8 u8CloudAddr[20];
-    u8  u8EqVersion[ZC_EQVERSION_LEN];
-    u8  u8TokenKey[16];    
-}MX_StaInfo;
 typedef struct{
   unsigned int start;
   unsigned int interval;
 }struMXtimer;
 
-MX_StaInfo g_struMXStaInfo = {
-    DEFAULT_IOT_CLOUD_KEY,
-    DEFAULT_IOT_PRIVATE_KEY,
-    DEFAULT_DEVICIID,
-    "www.ablecloud.cn",
-    {0,0,0,0},
-    DEFAULT_TOKEN
-};
 struMXtimer g_struMtTimer[ZC_TIMER_MAX_NUM];
 u32 u32CloudIp = 0;
-int g_Bcfd;
 u8 g_u8ClientSendLen = 0;
 MSG_Buffer g_struClientBuffer;
-u32 g_u32GloablIp;
+
+struct sockaddr_t struRemoteAddr;
 
 void MX_Rest(void);
-
-void Button_irq_handler(void *arg)
-{
-    ZC_Printf("easy link\n");
-    MX_Rest();
-}
-
-
-void Button_Init(void)
-{
-    GPIO_InitTypeDef   GPIO_InitStructure;
-
-    Button1_CLK_INIT(Button1_CLK, ENABLE);
-
-    GPIO_InitStructure.GPIO_Pin = Button1_PIN;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;			
-    GPIO_Init(Button1_PORT, &GPIO_InitStructure);
-
-    gpio_irq_enable(Button1_PORT, Button1_IRQ_PIN, IRQ_TRIGGER_FALLING_EDGE, Button_irq_handler, 0);
-}	
 
 
 /*************************************************
@@ -182,6 +85,31 @@ void MX_WakeUp()
 *************************************************/
 void MX_Sleep()
 {
+    u32 u32Index;
+    
+    close(g_Bcfd);
+
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        close(g_struProtocolController.struClientConnection.u32Socket);
+        g_struProtocolController.struClientConnection.u32Socket = PCT_INVAILD_SOCKET;
+    }
+
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struCloudConnection.u32Socket)
+    {
+        close(g_struProtocolController.struCloudConnection.u32Socket);
+        g_struProtocolController.struCloudConnection.u32Socket = PCT_INVAILD_SOCKET;
+    }
+    
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            close(g_struClientInfo.u32ClientFd[u32Index]);
+            g_struClientInfo.u32ClientFd[u32Index] = PCT_INVAILD_SOCKET;
+        }
+    }
+
     PCT_Sleep();
 }
 /*************************************************
@@ -192,7 +120,7 @@ void MX_Sleep()
 * Parameter: 
 * History:
 *************************************************/
-void MX_WriteDataToFlash(mxchipWNet_HA_st *configData)
+void MX_WriteDataToFlash(u8 *pu8Data, u16 u16Len)
 {
   uint32_t paraStartAddress, paraEndAddress;
   uint32_t next;
@@ -202,8 +130,8 @@ void MX_WriteDataToFlash(mxchipWNet_HA_st *configData)
   next = paraStartAddress + sizeof(mxchipWNet_HA_config_st);
   FLASH_If_Init();
   FLASH_If_Erase(paraStartAddress , paraEndAddress); 
-  FLASH_If_Write(&paraStartAddress, (u32 *)&configData->conf, sizeof(mxchipWNet_HA_config_st));
-  FLASH_If_Byte_Write(&next, (u8*)&g_struMXStaInfo, sizeof(MX_StaInfo));
+  FLASH_If_Write(&paraStartAddress, (u32 *)&device_info->conf, sizeof(mxchipWNet_HA_config_st));
+  FLASH_If_Byte_Write(&next, pu8Data, u16Len);
   FLASH_Lock();
 }
 
@@ -286,7 +214,7 @@ u32 MX_FirmwareUpdateFinish(u32 u32TotalLen)
     device_info->conf.bootTable.start_address = UPDATE_START_ADDRESS;
     device_info->conf.bootTable.type = 'A';
     device_info->conf.bootTable.upgrade_type = 'U';
-    MX_WriteDataToFlash(device_info);
+    MX_WriteDataToFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 
     FLASH_Lock();
     return ZC_RET_OK;
@@ -404,146 +332,32 @@ void MX_Rest()
     OpenEasylink(60*5);
 }
 /*************************************************
-* Function: MX_SendDataToNet
+* Function: MX_SendTcpData
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-void MX_SendDataToNet(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
+void MX_SendTcpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
 {
     send(u32Fd, pu8Data, u16DataLen, 0);
 }
 
 /*************************************************
-* Function: HF_GetStoreInfor
+* Function: MX_SendUdpData
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-u32 MX_GetStoreInfor(u8 u8Type, u8 **pu8Data)
+void MX_SendUdpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
 {
-    switch(u8Type)
-    {
-        case ZC_GET_TYPE_CLOUDKEY:
-            *pu8Data = g_struMXStaInfo.u8CloudKey;
-            break;
-        case ZC_GET_TYPE_DEVICEID:
-            *pu8Data = g_struMXStaInfo.u8DeviciId;
-            break;
-        case ZC_GET_TYPE_PRIVATEKEY:
-            *pu8Data = g_struMXStaInfo.u8PrivateKey;
-            break;
-        case ZC_GET_TYPE_VESION:
-            *pu8Data = g_struMXStaInfo.u8EqVersion;        
-            break;
-        case ZC_GET_TYPE_TOKENKEY:
-            *pu8Data = g_struMXStaInfo.u8TokenKey;
-            break;
-    }
-    return ZC_RET_OK;
-}
-/*************************************************
-* Function: MX_SendClientQueryReq
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void MX_SendClientQueryReq(u8 *pu8Msg, u16 u16RecvLen)
-{
-    ZC_MessageHead *pstruMsg;
-    struct sockaddr_t addr;
-    ZC_ClientQueryRsp struRsp;
-    u16 u16Len;
-    u8 *pu8DeviceId;
-    u8 *pu8Domain;    
-    u32 u32Index;
-    ZC_ClientQueryReq *pstruQuery;
-
-    if (g_struProtocolController.u8MainState < PCT_STATE_ACCESS_NET)
-    {
-        return;
-    }
-    
-    if (u16RecvLen != sizeof(ZC_MessageHead) + sizeof(ZC_ClientQueryReq))
-    {
-        return;
-    }
-    
-    pstruMsg = (ZC_MessageHead *)pu8Msg;
-    pstruQuery = (ZC_ClientQueryReq *)(pstruMsg + 1);
-
-    if (ZC_CODE_CLIENT_QUERY_REQ != pstruMsg->MsgCode)
-    {
-        return;
-    }
-    g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_DEVICEID, &pu8DeviceId);
-    pu8Domain = pu8DeviceId + ZC_HS_DEVICE_ID_LEN;
-
-    /*Only first 6 bytes is vaild*/
-    for (u32Index = 0; u32Index < 6; u32Index++)
-    {
-        if (pstruQuery->u8Domain[u32Index] != pu8Domain[u32Index])
-        {
-            return;
-        }
-        
-    }
-
-    memset((char*)&addr,0,sizeof(addr));
-    addr.s_ip = inet_addr("255.255.255.255"); 
-    addr.s_port = ZC_MOUDLE_BROADCAST_PORT;
-    
-    struRsp.addr[0] = (g_u32GloablIp >> 24) & 0xff;
-    struRsp.addr[1] = (g_u32GloablIp >> 16) & 0xff;       
-    struRsp.addr[2] = (g_u32GloablIp >> 8)  & 0xff; 
-    struRsp.addr[3] = g_u32GloablIp & 0xff;       
-    
-    memcpy(struRsp.DeviceId, pu8DeviceId, ZC_HS_DEVICE_ID_LEN);
-    EVENT_BuildMsg(ZC_CODE_CLIENT_QUERY_RSP, 0, g_u8MsgBuildBuffer, &u16Len, (u8*)&struRsp, sizeof(ZC_ClientQueryRsp));
-    sendto(g_Bcfd,g_u8MsgBuildBuffer,u16Len,0,(struct sockaddr_t *)&addr,sizeof(addr));             
+    sendto(u32Fd, pu8Data, u16DataLen, 0, 
+        (struct sockaddr_t*)pstruParam->pu8AddrPara, sizeof(struct sockaddr_t)); 
 }
 
-/*************************************************
-* Function: MX_RecvDataFromCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void MX_RecvDataFromCloud(u8 *pu8Data, u32 u32DataLen)
-{
-    u32 u32RetVal;
-    u16 u16PlainLen;
-    u32RetVal = MSG_RecvData(&g_struRecvBuffer, pu8Data, u32DataLen);
-
-    if (ZC_RET_OK == u32RetVal)
-    {
-        if (MSG_BUFFER_FULL == g_struRecvBuffer.u8Status)
-        {
-            u32RetVal = SEC_Decrypt((ZC_SecHead*)g_struRecvBuffer.u8MsgBuffer, 
-                g_struRecvBuffer.u8MsgBuffer + sizeof(ZC_SecHead), g_u8MsgBuildBuffer, &u16PlainLen);
-
-            /*copy data*/
-            memcpy(g_struRecvBuffer.u8MsgBuffer, g_u8MsgBuildBuffer, u16PlainLen);
-
-            g_struRecvBuffer.u32Len = u16PlainLen;
-            if (ZC_RET_OK == u32RetVal)
-            {
-                u32RetVal = MSG_PushMsg(&g_struRecvQueue, (u8*)&g_struRecvBuffer);
-            }
-        }
-    }
-    
-    return;
-
-}
 /*************************************************
 * Function: MX_ListenClient
 * Description: 
@@ -599,43 +413,15 @@ void MX_BcInit()
     tmp=1; 
     setsockopt(g_Bcfd, SOL_SOCKET,SO_BROADCAST,&tmp,sizeof(tmp)); 
     bind(g_Bcfd, &addr, sizeof(addr));
+    
+    g_struProtocolController.u16SendBcNum = 0;
+    memset((char*)&struRemoteAddr,0,sizeof(struRemoteAddr));
+
+    struRemoteAddr.s_port = ZC_MOUDLE_BROADCAST_PORT; 
+    struRemoteAddr.s_ip = inet_addr("255.255.255.255"); 
+    g_pu8RemoteAddr = (u8*)&struRemoteAddr;
+    g_u32BcSleepCount = 2500;
     return;
-}
-
-/*************************************************
-* Function: MX_StoreRegisterInfor
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-u32 MX_StoreRegisterInfor(u8 u8Type, u8 *pu8Data, u16 u16DataLen)
-{
-    ZC_RegisterReq *pstruRegister;
-    switch(u8Type)
-    {
-        case 0:
-        {
-            pstruRegister = (ZC_RegisterReq *)(pu8Data);
-            
-            memcpy(g_struMXStaInfo.u8PrivateKey, pstruRegister->u8ModuleKey, ZC_MODULE_KEY_LEN);
-            memcpy(g_struMXStaInfo.u8DeviciId, pstruRegister->u8DeviceId, ZC_HS_DEVICE_ID_LEN);
-            memcpy(g_struMXStaInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, pstruRegister->u8Domain, ZC_DOMAIN_LEN);
-            memcpy(g_struMXStaInfo.u8EqVersion, pstruRegister->u8EqVersion, ZC_EQVERSION_LEN);
-        }
-        break;
-        case 1:
-        {
-            memcpy(g_struMXStaInfo.u8TokenKey, pu8Data, u16DataLen);
-            MX_WriteDataToFlash(device_info);
-            break;        
-        }
-        default:
-            break;
-    }
-
-    return ZC_RET_OK;
 }
 
 /*************************************************
@@ -653,45 +439,17 @@ void MX_Init()
     g_struAdapter.pfunUpdate = MX_FirmwareUpdate;     
     g_struAdapter.pfunUpdateFinish = MX_FirmwareUpdateFinish;
     g_struAdapter.pfunSendToMoudle = MX_SendDataToMoudle;  
-    g_struAdapter.pfunGetStoreInfo = MX_GetStoreInfor;   
     g_struAdapter.pfunSetTimer = MX_SetTimer;   
     g_struAdapter.pfunStopTimer = MX_StopTimer;
     g_struAdapter.pfunListenClient = MX_ListenClient;
-
-    g_struAdapter.pfunSendToNet = MX_SendDataToNet;   
-    g_struAdapter.pfunStoreInfo = MX_StoreRegisterInfor;
+    g_struAdapter.pfunSendTcpData = MX_SendTcpData;  
+    g_struAdapter.pfunSendUdpData = MX_SendUdpData; 
     g_struAdapter.pfunRest = MX_Rest;
+    g_struAdapter.pfunWriteFlash = MX_WriteDataToFlash;
     
     g_u16TcpMss = 1000;
     PCT_Init(&g_struAdapter);
     MX_BcInit();
-}
-/*************************************************
-* Function: MX_SendDataToCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void MX_SendDataToCloud(PTC_Connection *pstruConnection)
-{
-    MSG_Buffer *pstruBuf = NULL;
-
-    u16 u16DataLen; 
-    pstruBuf = (MSG_Buffer *)MSG_PopMsg(&g_struSendQueue); 
-    
-    if (NULL == pstruBuf)
-    {
-        return;
-    }
-    
-    u16DataLen = pstruBuf->u32Len; 
-    send(pstruConnection->u32Socket, pstruBuf->u8MsgBuffer, u16DataLen, 0);
-    ZC_Printf("send data len = %d\n", u16DataLen);
-    pstruBuf->u8Status = MSG_BUFFER_IDLE;
-    pstruBuf->u32Len = 0;
-    return;
 }
 
 /*************************************************
@@ -725,28 +483,6 @@ void formatMACAddr(void *destAddr, void *srcAddr)
     				toupper(*((char *)(srcAddr)+8)),toupper(*((char *)(srcAddr)+9)),\
     				toupper(*((char *)(srcAddr)+10)),toupper(*((char *)(srcAddr)+11)));
 }
-/*************************************************
-* Function: MX_Rand
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void MX_Rand(u8 *pu8Rand)
-{
-    u32 u32Rand;
-    u32 u32Index; 
-    for (u32Index = 0; u32Index < 10; u32Index++)
-    {
-        u32Rand = rand();
-        pu8Rand[u32Index * 4] = ((u8)u32Rand % 26) + 65;
-        pu8Rand[u32Index * 4 + 1] = ((u8)(u32Rand >> 8) % 26) + 65;
-        pu8Rand[u32Index * 4 + 2] = ((u8)(u32Rand >> 16) % 26) + 65;
-        pu8Rand[u32Index * 4 + 3] = ((u8)(u32Rand >> 24) % 26) + 65;        
-    }
-}
-
 
 /*************************************************
 * Function: socket_connected
@@ -761,7 +497,7 @@ void socket_connected(int fd)
     ZC_Printf("socket connected\n");
     if(fd==g_struProtocolController.struCloudConnection.u32Socket)
     {
-        MX_Rand(g_struProtocolController.RandMsg);
+        ZC_Rand(g_struProtocolController.RandMsg);
         PCT_SendCloudAccessMsg1(&g_struProtocolController);
     }
 }
@@ -787,7 +523,7 @@ void RptConfigmodeRslt(network_InitTypeDef_st *nwkpara)
         memcpy(device_info->conf.sta_key, nwkpara->wifi_key, sizeof(device_info->conf.sta_key));
         /*Clear fastlink record*/
         memset(&(device_info->conf.fastLinkConf), 0x0, sizeof(fast_link_st));
-        MX_WriteDataToFlash(device_info);
+        MX_WriteDataToFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
         system_reload();
     }
 }
@@ -812,7 +548,7 @@ void connected_ap_info(apinfo_adv_t *ap_info, char *key, int key_len)  //callbac
     memcpy(&(device_info->conf.fastLinkConf.ap_info), ap_info, sizeof(ApList_adv_t));
     memcpy(device_info->conf.fastLinkConf.key, key, key_len);
     device_info->conf.fastLinkConf.key_len = key_len;
-    MX_WriteDataToFlash(device_info);
+    MX_WriteDataToFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
   }
 }
 /*************************************************
@@ -831,6 +567,7 @@ void WifiStatusHandler(int event)
             break;
         case MXCHIP_WIFI_DOWN:
             MX_Sleep();
+            MX_BcInit();
         case MXCHIP_WIFI_JOIN_FAILED:
             break;
         default:
@@ -881,7 +618,21 @@ void NetCallback(net_para_st *pnet)
     strcpy((char *)device_info->status.dns, pnet->dns);
 
     g_u32GloablIp = inet_addr((char *)device_info->status.ip);
-    retval = dns_request((char*)g_struMXStaInfo.u8CloudAddr);
+
+    if (1 == g_struZcConfigDb.struSwitchInfo.u32TestAddrConfig)
+    {
+        retval = dns_request((char *)"test.ablecloud.cn");
+    }
+    else if (2 == g_struZcConfigDb.struSwitchInfo.u32TestAddrConfig)
+    {
+        u32CloudIp = g_struZcConfigDb.struSwitchInfo.u32ServerIp;
+        retval = 1;
+    }
+    else
+    {
+        retval = dns_request((char *)g_struZcConfigDb.struCloudInfo.u8CloudAddr);
+    }
+
     if (retval > 0)
     {
         u32CloudIp = retval;
@@ -902,9 +653,19 @@ void NetCallback(net_para_st *pnet)
 void MX_ReadDataFormFlash(void) 
 {
     u32 configInFlash;
+    u32 u32MagicFlag = 0xFFFFFFFF;
+
+    configInFlash = PARA_START_ADDRESS;
+    memcpy(&u32MagicFlag, (void *)(configInFlash + sizeof(mxchipWNet_HA_config_st)), sizeof(u32));
+    if (ZC_MAGIC_FLAG == u32MagicFlag)
+    {
+        memcpy(&g_struZcConfigDb, (void *)(configInFlash + sizeof(mxchipWNet_HA_config_st)), sizeof(ZC_ConfigDB));
+    }
+    else
+    {
+        ZC_Printf("no para, use default\n");
+    }
     
-    configInFlash = PARA_START_ADDRESS ;
-    memcpy(&g_struMXStaInfo, (void *)(configInFlash + sizeof(mxchipWNet_HA_config_st)), sizeof(MX_StaInfo));
 }
 
 /*************************************************
@@ -925,8 +686,10 @@ void mxchipWNet_HA_init(void)
 
     SystemCoreClockUpdate();
     mxchipInit();
-    Button_Init();
     hal_uart_init();
+    MX_Init();
+
+    
     getNetPara(&para, Station);
     formatMACAddr((void *)device_info->status.mac, &para.mac);
     strcpy((char *)device_info->status.ip, (char *)&para.ip);
@@ -935,7 +698,6 @@ void mxchipWNet_HA_init(void)
     strcpy((char *)device_info->status.dns, (char *)&para.dns);
 
     readConfiguration(device_info);
-    MX_WriteDataToFlash(device_info);
     MX_ReadDataFormFlash();
 
     wNetConfig.wifi_mode = Station;
@@ -950,7 +712,6 @@ void mxchipWNet_HA_init(void)
     (void)StartNetwork(&wNetConfig);
 
     ps_enable();
-    MX_Init();
 }
 
 
@@ -1011,7 +772,7 @@ void MX_Recvtick(void)
             }
             else
             {
-                MX_RecvDataFromCloud(hugebuf, s32RecvLen);
+                MSG_RecvDataFromCloud(hugebuf, s32RecvLen);
             }
         }
     }
@@ -1060,45 +821,9 @@ void MX_Recvtick(void)
         s32RecvLen = recvfrom(g_Bcfd, g_u8MsgBuildBuffer, 100, 0, (struct sockaddr_t *)&addr, (socklen_t*)&tmp); 
         if(s32RecvLen > 0) 
         {
-            MX_SendClientQueryReq(g_u8MsgBuildBuffer, s32RecvLen);
+            ZC_SendClientQueryReq(g_u8MsgBuildBuffer, s32RecvLen);
         } 
     }    
-}
-/*************************************************
-* Function: MX_SendBc
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void MX_SendBc()
-{
-    struct sockaddr_t addr;
-    u16 u16Len;
-    static int sleepcount = 0;
-    if (PCT_STATE_CONNECT_CLOUD != g_struProtocolController.u8MainState)
-    {
-        sleepcount = 0;
-        return;
-    }
-    sleepcount++;
-    if (sleepcount > 2500)
-    {
-        memset((char*)&addr,0,sizeof(addr));
-        addr.s_ip = inet_addr("255.255.255.255"); 
-        addr.s_port = ZC_MOUDLE_BROADCAST_PORT;
-        
-        EVENT_BuildBcMsg(g_u8MsgBuildBuffer, &u16Len);
-
-        if (g_struProtocolController.u16SendBcNum < (PCT_SEND_BC_MAX_NUM / 4))
-        {
-            sendto(g_Bcfd, g_u8MsgBuildBuffer, u16Len, 0, &addr, sizeof(struct sockaddr_t)); 
-            g_struProtocolController.u16SendBcNum++;
-        }
-        sleepcount = 0;
-    }
-    
 }
 
 /*************************************************
@@ -1135,10 +860,10 @@ void mxchipWNet_HA_tick(void)
         }
         else
         {
-            MX_SendDataToCloud(&g_struProtocolController.struCloudConnection);
+            MSG_SendDataToCloud((u8*)&g_struProtocolController.struCloudConnection);
         }
 
-        MX_SendBc();
+        ZC_SendBc();
 
     }
 

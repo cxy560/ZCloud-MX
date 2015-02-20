@@ -205,11 +205,12 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
     u32 u32CiperLen;
     u8 *pu8Key;
     ZC_SendParam struParam;
+    u8 u8Iv[ZC_HS_SESSION_KEY_LEN];
     u16 crc;
 
     /*can hanle it,get aes key*/
     
-    g_struProtocolController.pstruMoudleFun->pfunGetStoreInfo(ZC_GET_TYPE_TOKENKEY, &pu8Key);
+    ZC_GetStoreInfor(ZC_GET_TYPE_TOKENKEY, &pu8Key);
 
     u32RetVal = ZC_CheckClientIdle(ClientId);
     if (ZC_RET_ERROR == u32RetVal)
@@ -218,17 +219,17 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
         
         EVENT_BuildMsg(ZC_CODE_ERR, 0, g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u16Len, 
             NULL, 0);
-        
+        memcpy(u8Iv, pu8Key, ZC_HS_SESSION_KEY_LEN);
         AES_CBC_Encrypt(g_u8MsgBuildBuffer + sizeof(ZC_SecHead), u16Len,
-            pu8Key, 16,
-            pu8Key, 16,
+            pu8Key, ZC_HS_SESSION_KEY_LEN,
+            u8Iv, ZC_HS_SESSION_KEY_LEN,
             g_u8MsgBuildBuffer + sizeof(ZC_SecHead), &u32CiperLen);
 
         pstruHead->u8SecType = ZC_SEC_ALG_AES;
         pstruHead->u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
 
         struParam.u8NeedPoll = 0;            
-        g_struProtocolController.pstruMoudleFun->pfunSendToNet(ClientId, g_u8MsgBuildBuffer, 
+        g_struProtocolController.pstruMoudleFun->pfunSendTcpData(ClientId, g_u8MsgBuildBuffer, 
             u32CiperLen + sizeof(ZC_SecHead), &struParam);
         return;            
     }
@@ -248,9 +249,10 @@ void ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
                 break;
             }
          
+            memcpy(u8Iv, pu8Key, ZC_HS_SESSION_KEY_LEN);
             AES_CBC_Decrypt(g_struClientBuffer.u8MsgBuffer + sizeof(ZC_SecHead), ZC_HTONS(pstruHead->u16TotalMsg), 
                 pu8Key, ZC_HS_SESSION_KEY_LEN, 
-                pu8Key, 16, 
+                u8Iv, ZC_HS_SESSION_KEY_LEN, 
                 g_u8MsgBuildBuffer, &u32CiperLen);
 
             pstruMsg = (ZC_MessageHead*)(g_u8MsgBuildBuffer);

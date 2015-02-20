@@ -35,7 +35,7 @@
 #ifndef TROPICSSL_BIGNUM_H
 #define TROPICSSL_BIGNUM_H
 
-#include <stdio.h>
+//#include <stdio.h>
 
 #define TROPICSSL_ERR_MPI_FILE_IO_ERROR                     -0x0002
 #define TROPICSSL_ERR_MPI_BAD_INPUT_DATA                    -0x0004
@@ -175,7 +175,7 @@ extern "C" {
 	 *
 	 * \return         0 if successful, or an TROPICSSL_ERR_MPI_XXX error code
 	 */
-	int mpi_read_file(mpi * X, int radix, FILE * fin);
+	//int mpi_read_file(mpi * X, int radix, FILE * fin);
 
 	/**
 	 * \brief          Write X into an opened file, or stdout
@@ -189,7 +189,7 @@ extern "C" {
 	 *
 	 * \note           Set fout == NULL to print X on the console.
 	 */
-	int mpi_write_file(const char *p, const mpi * X, int radix, FILE * fout);
+	//int mpi_write_file(const char *p, const mpi * X, int radix, FILE * fout);
 
 	/**
 	 * \brief          Import X from unsigned binary data, big endian
@@ -432,3 +432,5 @@ extern "C" {
 }
 #endif
 #endif				/* bignum.h */
+
+
