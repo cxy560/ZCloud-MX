@@ -48,6 +48,27 @@ MSG_Buffer g_struClientBuffer;
 struct sockaddr_t struRemoteAddr;
 
 void MX_Rest(void);
+void Button_irq_handler(void *arg)
+{
+    ZC_Printf("easy link\n");
+    MX_Rest();
+}
+
+
+void Button_Init(void)
+{
+    GPIO_InitTypeDef   GPIO_InitStructure;
+
+    Button1_CLK_INIT(Button1_CLK, ENABLE);
+
+    GPIO_InitStructure.GPIO_Pin = Button1_PIN;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;			
+    GPIO_Init(Button1_PORT, &GPIO_InitStructure);
+
+    gpio_irq_enable(Button1_PORT, Button1_IRQ_PIN, IRQ_TRIGGER_FALLING_EDGE, Button_irq_handler, 0);
+}
 
 
 /*************************************************
@@ -686,6 +707,7 @@ void mxchipWNet_HA_init(void)
 
     SystemCoreClockUpdate();
     mxchipInit();
+    Button_Init();
     hal_uart_init();
     MX_Init();
 
